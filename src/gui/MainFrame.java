@@ -43,9 +43,6 @@ public class MainFrame extends JFrame {
     private JComboBox<String> distanceMetricBox;
     private JComboBox<String> dtCriterionBox;
     private JTextArea resultArea;
-    private JButton btnRunKNN;
-    private JButton btnRunDT;
-    private JButton btnCompare;
     private BarChartPanel chartPanel;
 
     // --- Backend Sınıfları ---
