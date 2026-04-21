@@ -5,6 +5,7 @@ import data.PreProcessor;
 import classifier.KNNClassifier;
 import classifier.DecisionTreeClassifier;
 import evaluation.Evaluator;
+import gui.MainFrame.BarChartPanel;
 import model.ProcessedRecord;
 import model.UserRecord;
 
@@ -14,7 +15,6 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-        
 
 public class MainFrame extends JFrame {
 
@@ -350,18 +350,17 @@ public class MainFrame extends JFrame {
             List<ProcessedRecord> train = splits.get(0);
             List<ProcessedRecord> test = splits.get(1);
 
-            resultArea.append(String.format(">> KNN (K=%d) Başlatıldı... (Eğitim: %d, Test: %d)\n", k, train.size(), test.size()));
-            
-            // --- SÜRE ÖLÇÜMÜ BAŞLANGICI ---
-            long startTime = System.currentTimeMillis(); 
-            
+            resultArea.append(String.format(">> KNN (K=%d) Başlatıldı... (Eğitim: %d, Test: %d)\n", k, train.size(),
+                    test.size()));
+
             knn.setK(k);
-            knn.train(train);
+
+            // Kalıtım (Inheritance) ile gelen sarmalayıcı metodu çağırıyoruz!
+            knn.trainWithTiming(train);
             Evaluator.EvaluationResult res = (Evaluator.EvaluationResult) evaluator.evaluate(knn, test);
-            
-            // --- SÜRE ÖLÇÜMÜ BİTİŞİ ---
-            long endTime = System.currentTimeMillis(); 
-            long executionTime = endTime - startTime;
+
+            // Süreyi doğrudan nesnenin kendisinden (BaseAlgorithm'den) çekiyoruz
+            long executionTime = knn.getExecutionTimeMs();
 
             // Çıktıyı Formatlama
             resultArea.append("--------------------------------------------------\n");
@@ -369,11 +368,11 @@ public class MainFrame extends JFrame {
             resultArea.append(res.toString() + "\n");
             resultArea.append(String.format(">> Toplam Çalışma Süresi: %d ms\n", executionTime));
             resultArea.append("--------------------------------------------------\n");
-            
+
             // Grafiği Güncelle
             double accuracyPercentage = (res.accuracy <= 1.0) ? res.accuracy * 100 : res.accuracy;
             chartPanel.updateKNN(accuracyPercentage);
-            
+
         } catch (Exception ex) {
             resultArea.append("Hata (KNN): " + ex.getMessage() + "\n");
         }
@@ -386,17 +385,17 @@ public class MainFrame extends JFrame {
             List<ProcessedRecord> train = splits.get(0);
             List<ProcessedRecord> test = splits.get(1);
 
-            resultArea.append(String.format(">> Karar Ağacı Başlatıldı... (Eğitim: %d, Test: %d)\n", train.size(), test.size()));
-            
-            // --- SÜRE ÖLÇÜMÜ BAŞLANGICI ---
-            long startTime = System.currentTimeMillis(); 
-            
-            dt.train(train);
+            resultArea.append(
+                    String.format(">> Karar Ağacı Başlatıldı... (Eğitim: %d, Test: %d)\n", train.size(), test.size()));
+
+            // Kalıtım (Inheritance) ile gelen sarmalayıcı metodu çağırıyoruz!
+            dt.trainWithTiming(train);
+
+            // Test verisi üzerinde değerlendirme yapıyoruz
             Evaluator.EvaluationResult res = (Evaluator.EvaluationResult) evaluator.evaluate(dt, test);
-            
-            // --- SÜRE ÖLÇÜMÜ BİTİŞİ ---
-            long endTime = System.currentTimeMillis(); 
-            long executionTime = endTime - startTime;
+
+            // Süreyi üst sınıftan (BaseAlgorithm) miras aldığımız metotla çekiyoruz
+            long executionTime = dt.getExecutionTimeMs();
 
             // Çıktıyı Formatlama
             resultArea.append("--------------------------------------------------\n");
@@ -404,11 +403,11 @@ public class MainFrame extends JFrame {
             resultArea.append(res.toString() + "\n");
             resultArea.append(String.format(">> Toplam Çalışma Süresi: %d ms\n", executionTime));
             resultArea.append("--------------------------------------------------\n");
-            
+
             // Grafiği Güncelle
             double accuracyPercentage = (res.accuracy <= 1.0) ? res.accuracy * 100 : res.accuracy;
             chartPanel.updateDT(accuracyPercentage);
-            
+
         } catch (Exception ex) {
             resultArea.append("Hata (DT): " + ex.getMessage() + "\n");
         }

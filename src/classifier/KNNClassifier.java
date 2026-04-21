@@ -7,7 +7,7 @@ import java.util.*;
  * K-Nearest Neighbors classifier implementation.
  * Uses Euclidean distance to find the k nearest neighbors and majority voting for classification.
  */
-public class KNNClassifier implements IClassifier {
+public class KNNClassifier extends BaseAlgorithm {
 
     private List<ProcessedRecord> trainingData;
     private int k;

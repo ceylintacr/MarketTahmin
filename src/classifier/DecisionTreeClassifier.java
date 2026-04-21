@@ -3,14 +3,10 @@ package classifier;
 import model.ProcessedRecord;
 import java.util.*;
 
-public class DecisionTreeClassifier implements IClassifier {
+public class DecisionTreeClassifier extends BaseAlgorithm {
 
     private Node root;
     private int maxDepth = 6; // Ağacın aşırı ezberlemesini (overfitting) önlemek için
-
-    public DecisionTreeClassifier() {
-        // Boş yapıcı metot
-    }
 
     @Override
     public void train(List<ProcessedRecord> data) {
