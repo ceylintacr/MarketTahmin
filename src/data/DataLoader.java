@@ -1,137 +1,101 @@
 package data;
 
 import model.UserRecord;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import java.io.*;
-import java.util.*;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-import javax.xml.parsers.DocumentBuilderFactory;
-import org.w3c.dom.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DataLoader {
 
-    // Kendi Excel'ine göre doğru kolon numaralarını (index) kontrol etmelisin
-    private static final int COL_AGE         = 16; // YAŞ KOLONUNU BURAYA EKLEDİM (Örn: Q sütunuysa 16 olabilir, kontrol et)
+    // Excel sütun indeksleri (Sıfırdan başlar: H=7, L=11, M=12, Q=16, R=17)
     private static final int COL_TOTAL_PRICE = 7;  // LINENETTOTAL
-    private static final int COL_BRAND       = 11; // Şehir olarak kullanılıyor
-    private static final int COL_CATEGORY    = 12; // CATEGORY_NAME1
-    private static final int COL_GENDER      = 17; // K / E
+    private static final int COL_BRAND       = 11; // Şehir/Marka proxy'si
+    private static final int COL_CATEGORY    = 12; // CATEGORY_NAME1 (Hedef Sınıf)
+    private static final int COL_AGE         = 16; // Yaş
+    private static final int COL_GENDER      = 17; // Cinsiyet
 
+    /**
+     * Apache POI kullanarak Excel dosyasını okur ve UserRecord listesine dönüştürür.
+     */
     public List<UserRecord> load(String filePath) {
         List<UserRecord> records = new ArrayList<>();
 
-        try (ZipFile zipFile = new ZipFile(filePath)) {
-            List<String> sharedStrings = readSharedStrings(zipFile);
-            Document sheet = readXML(zipFile, "xl/worksheets/sheet1.xml");
-            NodeList rows = sheet.getElementsByTagName("row");
+        // FileInputStream ve Workbook'u try-with-resources ile açıyoruz (Otomatik kapanır)
+        try (FileInputStream fis = new FileInputStream(new File(filePath));
+             Workbook workbook = new XSSFWorkbook(fis)) {
 
-            for (int i = 1; i < rows.getLength(); i++) { // header skip
-                Element row = (Element) rows.item(i);
-                Map<Integer, String> cells = getCells(row, sharedStrings);
+            // İlk çalışma sayfasını al
+            Sheet sheet = workbook.getSheetAt(0);
+            boolean isFirstRow = true;
+
+            for (Row row : sheet) {
+                // Başlık (Header) satırını atla
+                if (isFirstRow) {
+                    isFirstRow = false;
+                    continue;
+                }
 
                 try {
-                    String ageStr   = cells.get(COL_AGE); // Yaş verisi çekildi
-                    String gender   = cells.get(COL_GENDER);
-                    String brand    = cells.get(COL_BRAND);
-                    String priceStr = cells.get(COL_TOTAL_PRICE);
-                    String category = cells.get(COL_CATEGORY);
+                    // İlgili hücreleri al
+                    Cell ageCell = row.getCell(COL_AGE);
+                    Cell genderCell = row.getCell(COL_GENDER);
+                    Cell brandCell = row.getCell(COL_BRAND);
+                    Cell priceCell = row.getCell(COL_TOTAL_PRICE);
+                    Cell categoryCell = row.getCell(COL_CATEGORY);
 
-                    // Eğer herhangi biri null ise (ageStr eklendi) atla
-                    if (ageStr == null || gender == null || brand == null || priceStr == null || category == null)
+                    // Veri eksiği (boş hücre) olan satırları güvenle atla
+                    if (isCellEmpty(ageCell) || isCellEmpty(genderCell) || 
+                        isCellEmpty(brandCell) || isCellEmpty(priceCell) || isCellEmpty(categoryCell)) {
                         continue;
+                    }
 
-                    // String olan yaşı Integer'a çevir
-                    int age = (int) Double.parseDouble(ageStr); 
-                    double totalPrice = Double.parseDouble(priceStr);
+                    // POI üzerinden veri tiplerini güvenli bir şekilde çekiyoruz
+                    // Excel'de sayılar genellikle Numeric, metinler String olarak saklanır
+                    int age = (int) ageCell.getNumericCellValue();
+                    String gender = getCellStringValue(genderCell);
+                    String brand = getCellStringValue(brandCell);
+                    double totalPrice = priceCell.getNumericCellValue();
+                    String category = getCellStringValue(categoryCell);
 
-                    // UserRecord artık 5 parametre bekliyor (en başta age var)
+                    // Modele ekle
                     records.add(new UserRecord(age, gender, brand, totalPrice, category));
 
                 } catch (Exception e) {
-                    // hatalı satırı at
+                    // Tekil satırlardaki format hatalarında programın çökmesini engelle
+                    // Örneğin sayı gelmesi gereken yerde metin varsa o satırı yoksayar
                 }
             }
-            System.out.println("Loaded records: " + records.size());
+            System.out.println("Apache POI ile " + records.size() + " geçerli kayıt başarıyla yüklendi.");
 
         } catch (Exception e) {
+            System.err.println("Kritik Hata: Excel dosyası okunurken bir sorun oluştu!");
             e.printStackTrace();
         }
+
         return records;
     }
-    // ---------------- HELPER ----------------
 
-    private Map<Integer, String> getCells(Element row, List<String> sharedStrings) {
-
-        Map<Integer, String> map = new HashMap<>();
-        NodeList cells = row.getElementsByTagName("c");
-
-        for (int i = 0; i < cells.getLength(); i++) {
-
-            Element cell = (Element) cells.item(i);
-            String ref = cell.getAttribute("r");
-            String type = cell.getAttribute("t");
-
-            NodeList vList = cell.getElementsByTagName("v");
-            if (vList.getLength() == 0) continue;
-
-            String value = vList.item(0).getTextContent();
-            int col = getColumnIndex(ref);
-
-            if ("s".equals(type)) {
-                int idx = Integer.parseInt(value);
-                value = sharedStrings.get(idx);
-            }
-
-            map.put(col, value);
-        }
-
-        return map;
+    /**
+     * Hücrenin boş (blank) veya null olup olmadığını kontrol eder.
+     */
+    private boolean isCellEmpty(Cell cell) {
+        return cell == null || cell.getCellType() == CellType.BLANK;
     }
 
-    private int getColumnIndex(String ref) {
-        String letters = ref.replaceAll("[^A-Z]", "");
-        int result = 0;
-
-        for (int i = 0; i < letters.length(); i++) {
-            result = result * 26 + (letters.charAt(i) - 'A' + 1);
+    /**
+     * Hücre içeriğini tipine bakmaksızın String olarak döndürür.
+     */
+    private String getCellStringValue(Cell cell) {
+        if (cell.getCellType() == CellType.STRING) {
+            return cell.getStringCellValue().trim();
+        } else if (cell.getCellType() == CellType.NUMERIC) {
+            // Numeric hücreyi metne çevirirken ondalık kısmı atıyoruz
+            return String.valueOf((int) cell.getNumericCellValue()).trim();
         }
-
-        return result - 1;
-    }
-
-    private List<String> readSharedStrings(ZipFile zipFile) throws Exception {
-
-        List<String> list = new ArrayList<>();
-
-        ZipEntry entry = zipFile.getEntry("xl/sharedStrings.xml");
-        if (entry == null) return list;
-
-        Document doc = readXML(zipFile, "xl/sharedStrings.xml");
-        NodeList nodes = doc.getElementsByTagName("si");
-
-        for (int i = 0; i < nodes.getLength(); i++) {
-            Element si = (Element) nodes.item(i);
-            NodeList tList = si.getElementsByTagName("t");
-
-            StringBuilder sb = new StringBuilder();
-            for (int j = 0; j < tList.getLength(); j++) {
-                sb.append(tList.item(j).getTextContent());
-            }
-
-            list.add(sb.toString());
-        }
-
-        return list;
-    }
-
-    private Document readXML(ZipFile zipFile, String path) throws Exception {
-
-        ZipEntry entry = zipFile.getEntry(path);
-        InputStream is = zipFile.getInputStream(entry);
-
-        return DocumentBuilderFactory.newInstance()
-                .newDocumentBuilder()
-                .parse(is);
+        return cell.toString().trim();
     }
 }
