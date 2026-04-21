@@ -34,7 +34,7 @@ public class MainFrame extends JFrame {
     private JRadioButton rbCompare;
     private JButton btnRunModel;
 
-    // Parametre Bileşenleri (Fake olanlar silindi)
+    // Parametre Bileşenleri
     private JTextField kValueField;
     private JTextField testRatioField;
     private JTextArea resultArea;
@@ -140,8 +140,6 @@ public class MainFrame extends JFrame {
         paramPanel.add(new JLabel(" |  KNN (K Değeri):"));
         kValueField = new JTextField("5", 3);
         paramPanel.add(kValueField);
-
-        // FIX 6: Fake "distanceMetricBox" ve "dtCriterionBox" arayüzden ve koddan silindi.
 
         modelAndParamPanel.add(modelSelectionPanel);
         modelAndParamPanel.add(paramPanel);
@@ -287,7 +285,9 @@ public class MainFrame extends JFrame {
             KNNClassifier knn = new KNNClassifier(k, new PreProcessor());
 
             knn.trainWithTiming(train);
-            Evaluator.EvaluationResult res = (Evaluator.EvaluationResult) evaluator.evaluate(knn, test);
+            
+            // DÜZELTME: Cast işlemi kaldırıldı.
+            Evaluator.EvaluationResult res = evaluator.evaluate(knn, test);
 
             long executionTime = knn.getExecutionTimeMs();
 
@@ -317,7 +317,9 @@ public class MainFrame extends JFrame {
             DecisionTreeClassifier dt = new DecisionTreeClassifier(new PreProcessor());
 
             dt.trainWithTiming(train);
-            Evaluator.EvaluationResult res = (Evaluator.EvaluationResult) evaluator.evaluate(dt, test);
+            
+            // DÜZELTME: Cast işlemi kaldırıldı.
+            Evaluator.EvaluationResult res = evaluator.evaluate(dt, test);
 
             long executionTime = dt.getExecutionTimeMs();
 
