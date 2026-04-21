@@ -1,6 +1,6 @@
 package classifier;
 
-import model.ProcessedRecord;
+import model.UserRecord;
 import java.util.List;
 
 public abstract class BaseAlgorithm implements IClassifier {
@@ -15,7 +15,7 @@ public abstract class BaseAlgorithm implements IClassifier {
         return executionTimeMs;
     }
 
-    public void trainWithTiming(List<ProcessedRecord> data) {
+    public void trainWithTiming(List<UserRecord> data) {
         long startTime = System.currentTimeMillis();
         
         this.train(data); 

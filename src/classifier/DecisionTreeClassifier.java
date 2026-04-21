@@ -1,28 +1,58 @@
 package classifier;
 
+import data.PreProcessor;
 import model.ProcessedRecord;
+import model.UserRecord;
 import java.util.*;
 
 public class DecisionTreeClassifier extends BaseAlgorithm {
 
     private Node root;
-    private int maxDepth = 6; // Ağacın aşırı ezberlemesini (overfitting) önlemek için
+    private PreProcessor preProcessor;
+    private int maxDepth = 6; 
 
-    @Override
-    public void train(List<ProcessedRecord> data) {
-        root = buildTree(data, 0);
+    public DecisionTreeClassifier(PreProcessor preProcessor) {
+        if (preProcessor == null) {
+            throw new IllegalArgumentException("PreProcessor cannot be null");
+        }
+        this.preProcessor = preProcessor;
     }
 
     @Override
-    public String predict(double[] features) {
+    public void train(List<UserRecord> rawTrainingData) {
+        if (rawTrainingData == null || rawTrainingData.isEmpty()) {
+            throw new IllegalArgumentException("Training data cannot be null or empty");
+        }
+
+        // 1. DATA LEAKAGE FIX: Sadece train verisiyle FIT et
+        this.preProcessor.fit(rawTrainingData);
+        
+        // 2. Train verisini TRANSFORM et ve model ağacını kur
+        List<ProcessedRecord> processedData = new ArrayList<>();
+        for (UserRecord user : rawTrainingData) {
+            double[] features = this.preProcessor.transform(user);
+            processedData.add(new ProcessedRecord(features, user.getCategory()));
+        }
+        
+        root = buildTree(processedData, 0);
+    }
+
+    @Override
+    public String predict(UserRecord user) {
+        if (root == null || preProcessor == null) {
+            throw new IllegalStateException("Classifier must be trained before prediction");
+        }
+        
+        // Yeni gelen kullanıcıyı (test) transform et.
+        double[] features = preProcessor.transform(user);
         return predictRecursive(root, features);
     }
 
     @Override
-    public List<String> predict(List<double[]> featuresList) {
+    public List<String> predict(List<UserRecord> users) {
         List<String> results = new ArrayList<>();
-        for (double[] f : featuresList) {
-            results.add(predict(f));
+        for (UserRecord user : users) {
+            results.add(predict(user));
         }
         return results;
     }
@@ -33,11 +63,9 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
     }
 
     private String predictRecursive(Node node, double[] features) {
-        // Eğer yaprak düğümdeysek (leaf) sınıfı döndür
         if (node.label != null)
             return node.label;
 
-        // Ağaçta aşağı inmeye devam et
         if (features[node.featureIndex] < node.threshold)
             return predictRecursive(node.left, features);
         else
@@ -50,7 +78,6 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
         if (data.isEmpty())
             return null;
 
-        // Maksimum derinliğe ulaşıldıysa veya tüm veri aynı sınıftansa yaprak düğüm oluştur.
         if (depth >= maxDepth || isPure(data)) {
             return new Node(getMajority(data));
         }
@@ -60,8 +87,6 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
         int bestFeature = -1;
         double bestThreshold = 0;
 
-        // Tüm özellikler (features) ve tüm olası eşik değerleri (thresholds) denenerek
-        // Gini safsızlığını en aza indiren bölünme noktası bulunur.
         for (int i = 0; i < featureCount; i++) {
             List<Double> values = new ArrayList<>();
             for (ProcessedRecord r : data) {
@@ -70,7 +95,6 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
             Collections.sort(values);
 
             for (int j = 1; j < values.size(); j++) {
-                // Aynı değerlerin üzerinden eşik değeri hesaplamayı atla (Hata #3 çözümü)
                 if (values.get(j).equals(values.get(j - 1))) continue;
 
                 double threshold = (values.get(j - 1) + values.get(j)) / 2;
@@ -84,7 +108,6 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
             }
         }
 
-        // Geçerli hiçbir eşik değeri bulunamadıysa çoğunluk sınıfına sahip bir yaprak yap
         if (bestFeature == -1) {
             return new Node(getMajority(data));
         }
@@ -99,7 +122,6 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
                 right.add(r);
         }
 
-        // 🚨 Sola veya sağa hiçbir şey düşmediyse çökmesini engellemek için yaprak yap
         if (left.isEmpty() || right.isEmpty()) {
             return new Node(getMajority(data));
         }
@@ -130,8 +152,6 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
         }
 
         int total = data.size();
-        
-        // Hata #2 Çözümü: Veri sayısına göre Gini ağırlıklı ortalaması (Weighted Gini)
         double leftWeight = (double) leftCount / total;
         double rightWeight = (double) rightCount / total;
 
@@ -148,10 +168,8 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
             sum += p * p;
         }
 
-        return 1 - sum; // Gini Impurity Formülü
+        return 1 - sum; 
     }
-
-    // ================= YARDIMCI METOTLAR =================
 
     private boolean isPure(List<ProcessedRecord> data) {
         String first = data.get(0).getLabel();
@@ -171,8 +189,6 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
                 .max(Map.Entry.comparingByValue())
                 .get().getKey();
     }
-
-    // ================= NODE YAPISI =================
 
     static class Node {
         int featureIndex;

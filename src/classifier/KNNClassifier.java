@@ -1,72 +1,72 @@
 package classifier;
 
+import data.PreProcessor;
 import model.ProcessedRecord;
+import model.UserRecord;
 import java.util.*;
 
-/**
- * K-Nearest Neighbors classifier implementation.
- * Uses Euclidean distance to find the k nearest neighbors and majority voting for classification.
- */
 public class KNNClassifier extends BaseAlgorithm {
 
     private List<ProcessedRecord> trainingData;
+    private PreProcessor preProcessor;
     private int k;
 
-    /**
-     * Creates a KNN classifier with default k=3.
-     */
-    public KNNClassifier() {
-        this.k = 3;
-    }
-
-    /**
-     * Creates a KNN classifier with specified k value.
-     *
-     * @param k number of nearest neighbors to consider
-     */
-    public KNNClassifier(int k) {
+    public KNNClassifier(int k, PreProcessor preProcessor) {
         if (k <= 0) {
             throw new IllegalArgumentException("k must be positive");
         }
+        if (preProcessor == null) {
+            throw new IllegalArgumentException("PreProcessor cannot be null");
+        }
         this.k = k;
+        this.preProcessor = preProcessor;
     }
 
     @Override
-    public void train(List<ProcessedRecord> trainingData) {
-        if (trainingData == null || trainingData.isEmpty()) {
+    public void train(List<UserRecord> rawTrainingData) {
+        if (rawTrainingData == null || rawTrainingData.isEmpty()) {
             throw new IllegalArgumentException("Training data cannot be null or empty");
         }
-        this.trainingData = new ArrayList<>(trainingData);
+        
+        // 1. DATA LEAKAGE FIX: Önce sadece eğitim verisiyle modeli (scaling, encoding) FIT et.
+        this.preProcessor.fit(rawTrainingData);
+        
+        // 2. Eğitim verilerini TRANSFORM et ve sınıflandırıcıya kaydet.
+        this.trainingData = new ArrayList<>();
+        for (UserRecord user : rawTrainingData) {
+            double[] features = this.preProcessor.transform(user);
+            this.trainingData.add(new ProcessedRecord(features, user.getCategory()));
+        }
+        
         System.out.println("[KNNClassifier] Trained on " + trainingData.size() + " records with k=" + k);
     }
 
     @Override
-    public String predict(double[] features) {
-        if (trainingData == null) {
+    public String predict(UserRecord user) {
+        if (trainingData == null || preProcessor == null) {
             throw new IllegalStateException("Classifier must be trained before prediction");
         }
-        if (features == null || features.length == 0) {
-            throw new IllegalArgumentException("Features cannot be null or empty");
+        if (user == null) {
+            throw new IllegalArgumentException("User cannot be null");
         }
 
-        // Calculate distances to all training points
+        // Test verisini veya tekil müşteriyi mevcut eğitim istatistikleriyle TRANSFORM et.
+        double[] features = preProcessor.transform(user);
+
         List<Neighbor> neighbors = new ArrayList<>();
         for (ProcessedRecord record : trainingData) {
             double distance = euclideanDistance(features, record.getFeatures());
             neighbors.add(new Neighbor(distance, record.getLabel()));
         }
 
-        // Sort by distance (ascending)
         neighbors.sort(Comparator.comparingDouble(n -> n.distance));
 
-        // Get k nearest neighbors
         Map<String, Integer> labelCounts = new HashMap<>();
         for (int i = 0; i < Math.min(k, neighbors.size()); i++) {
             String label = neighbors.get(i).label;
             labelCounts.put(label, labelCounts.getOrDefault(label, 0) + 1);
         }
 
-        // Return the most frequent label
         return labelCounts.entrySet().stream()
                 .max(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
@@ -74,10 +74,10 @@ public class KNNClassifier extends BaseAlgorithm {
     }
 
     @Override
-    public List<String> predict(List<double[]> featuresList) {
+    public List<String> predict(List<UserRecord> users) {
         List<String> predictions = new ArrayList<>();
-        for (double[] features : featuresList) {
-            predictions.add(predict(features));
+        for (UserRecord user : users) {
+            predictions.add(predict(user));
         }
         return predictions;
     }
@@ -87,14 +87,10 @@ public class KNNClassifier extends BaseAlgorithm {
         return "K-Nearest Neighbors (k=" + k + ")";
     }
 
-    /**
-     * Calculates Euclidean distance between two feature vectors.
-     */
     private double euclideanDistance(double[] a, double[] b) {
         if (a.length != b.length) {
             throw new IllegalArgumentException("Feature vectors must have same length");
         }
-
         double sum = 0.0;
         for (int i = 0; i < a.length; i++) {
             double diff = a[i] - b[i];
@@ -103,9 +99,6 @@ public class KNNClassifier extends BaseAlgorithm {
         return Math.sqrt(sum);
     }
 
-    /**
-     * Helper class to store neighbor information.
-     */
     private static class Neighbor {
         final double distance;
         final String label;
@@ -116,11 +109,6 @@ public class KNNClassifier extends BaseAlgorithm {
         }
     }
 
-    /**
-     * Sets the k value for this classifier.
-     *
-     * @param k new k value
-     */
     public void setK(int k) {
         if (k <= 0) {
             throw new IllegalArgumentException("k must be positive");
@@ -128,11 +116,6 @@ public class KNNClassifier extends BaseAlgorithm {
         this.k = k;
     }
 
-    /**
-     * Gets the current k value.
-     *
-     * @return k value
-     */
     public int getK() {
         return k;
     }

@@ -1,6 +1,6 @@
 package classifier;
 
-import model.ProcessedRecord;
+import model.UserRecord;
 import java.util.List;
 
 /**
@@ -10,27 +10,27 @@ import java.util.List;
 public interface IClassifier {
 
     /**
-     * Trains the classifier using the provided training data.
+     * Trains the classifier using the provided raw user training data.
      *
-     * @param trainingData list of processed training records
+     * @param trainingData list of raw UserRecord instances
      */
-    void train(List<ProcessedRecord> trainingData);
+    void train(List<UserRecord> trainingData);
 
     /**
-     * Predicts the class label for a single feature vector.
+     * Predicts the class label for a single UserRecord.
      *
-     * @param features normalized feature vector
+     * @param user the user record to predict
      * @return predicted class label
      */
-    String predict(double[] features);
+    String predict(UserRecord user);
 
     /**
-     * Predicts class labels for multiple feature vectors.
+     * Predicts class labels for multiple UserRecords.
      *
-     * @param featuresList list of normalized feature vectors
+     * @param users list of user records
      * @return list of predicted class labels
      */
-    List<String> predict(List<double[]> featuresList);
+    List<String> predict(List<UserRecord> users);
 
     /**
      * Returns the name of this classifier for display purposes.

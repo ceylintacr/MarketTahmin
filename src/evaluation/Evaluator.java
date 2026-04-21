@@ -1,23 +1,16 @@
 package evaluation;
 
 import classifier.IClassifier;
-import model.ProcessedRecord;
+import model.UserRecord;
 import java.util.*;
+import java.util.function.Supplier; // EKLENDİ
 
 /**
  * Evaluates classifier performance using various metrics.
- * Supports accuracy, precision, recall, and F1-score calculations.
  */
 public class Evaluator {
 
-    /**
-     * Evaluates a classifier on test data and returns performance metrics.
-     *
-     * @param classifier trained classifier to evaluate
-     * @param testData list of processed test records
-     * @return evaluation results
-     */
-    public EvaluationResult evaluate(IClassifier classifier, List<ProcessedRecord> testData) {
+    public EvaluationResult evaluate(IClassifier classifier, List<UserRecord> testData) {
         if (classifier == null) {
             throw new IllegalArgumentException("Classifier cannot be null");
         }
@@ -28,24 +21,19 @@ public class Evaluator {
         List<String> trueLabels = new ArrayList<>();
         List<String> predictedLabels = new ArrayList<>();
 
-        // Get predictions
-        for (ProcessedRecord record : testData) {
-            trueLabels.add(record.getLabel());
-            predictedLabels.add(classifier.predict(record.getFeatures()));
+        for (UserRecord record : testData) {
+            trueLabels.add(record.getCategory());
+            predictedLabels.add(classifier.predict(record));
         }
 
         return calculateMetrics(trueLabels, predictedLabels);
     }
 
     /**
-     * Performs k-fold cross-validation on the classifier.
-     *
-     * @param classifier classifier to evaluate
-     * @param data all available data
-     * @param k number of folds
-     * @return average evaluation results across all folds
+     * FIX 9: IClassifier nesnesi yerine Supplier<IClassifier> alıyoruz.
+     * Bu sayede her fold için "classifierSupplier.get()" diyerek TERTEMİZ bir model üreteceğiz.
      */
-    public EvaluationResult crossValidate(IClassifier classifier, List<ProcessedRecord> data, int k) {
+    public EvaluationResult crossValidate(Supplier<IClassifier> classifierSupplier, List<UserRecord> data, int k) {
         if (k <= 1) {
             throw new IllegalArgumentException("k must be greater than 1");
         }
@@ -53,17 +41,15 @@ public class Evaluator {
             throw new IllegalArgumentException("Not enough data for " + k + "-fold cross-validation");
         }
 
-        // Shuffle data
-        List<ProcessedRecord> shuffledData = new ArrayList<>(data);
+        List<UserRecord> shuffledData = new ArrayList<>(data);
         Collections.shuffle(shuffledData, new Random(42));
 
         int foldSize = data.size() / k;
         List<EvaluationResult> foldResults = new ArrayList<>();
 
         for (int i = 0; i < k; i++) {
-            // Split data into training and test sets
-            List<ProcessedRecord> testFold = new ArrayList<>();
-            List<ProcessedRecord> trainFold = new ArrayList<>();
+            List<UserRecord> testFold = new ArrayList<>();
+            List<UserRecord> trainFold = new ArrayList<>();
 
             for (int j = 0; j < data.size(); j++) {
                 if (j >= i * foldSize && j < (i + 1) * foldSize) {
@@ -73,25 +59,22 @@ public class Evaluator {
                 }
             }
 
-            // Train and evaluate
+            // FIX 9: Her fold'da YENİ bir classifier ve YENİ bir PreProcessor nesnesi yaratılır.
+            IClassifier classifier = classifierSupplier.get(); 
+            
             classifier.train(trainFold);
             EvaluationResult result = evaluate(classifier, testFold);
             foldResults.add(result);
         }
 
-        // Calculate averages
         return averageResults(foldResults);
     }
 
-    /**
-     * Calculates evaluation metrics from true and predicted labels.
-     */
     private EvaluationResult calculateMetrics(List<String> trueLabels, List<String> predictedLabels) {
         if (trueLabels.size() != predictedLabels.size()) {
             throw new IllegalArgumentException("True and predicted labels must have same size");
         }
 
-        // Calculate confusion matrix
         Map<String, Map<String, Integer>> confusionMatrix = new HashMap<>();
         Set<String> allLabels = new HashSet<>();
         allLabels.addAll(trueLabels);
@@ -111,7 +94,6 @@ public class Evaluator {
                 confusionMatrix.get(trueLabel).get(predLabel) + 1);
         }
 
-        // Calculate metrics
         int total = trueLabels.size();
         int correct = 0;
         Map<String, Double> precision = new HashMap<>();
@@ -123,14 +105,12 @@ public class Evaluator {
             int falsePositives = 0;
             int falseNegatives = 0;
 
-            // Calculate false positives
             for (String otherLabel : allLabels) {
                 if (!otherLabel.equals(label)) {
                     falsePositives += confusionMatrix.get(otherLabel).get(label);
                 }
             }
 
-            // Calculate false negatives
             for (String otherLabel : allLabels) {
                 if (!otherLabel.equals(label)) {
                     falseNegatives += confusionMatrix.get(label).get(otherLabel);
@@ -139,7 +119,6 @@ public class Evaluator {
 
             correct += truePositives;
 
-            // Calculate precision, recall, F1
             double prec = (truePositives + falsePositives) == 0 ? 0.0 :
                 (double) truePositives / (truePositives + falsePositives);
             double rec = (truePositives + falseNegatives) == 0 ? 0.0 :
@@ -156,9 +135,6 @@ public class Evaluator {
         return new EvaluationResult(accuracy, precision, recall, f1Score, confusionMatrix);
     }
 
-    /**
-     * Averages multiple evaluation results.
-     */
     private EvaluationResult averageResults(List<EvaluationResult> results) {
         if (results.isEmpty()) {
             throw new IllegalArgumentException("Results list cannot be empty");
@@ -166,7 +142,6 @@ public class Evaluator {
 
         double avgAccuracy = results.stream().mapToDouble(r -> r.accuracy).average().orElse(0.0);
 
-        // For per-class metrics, we need to collect all labels first
         Set<String> allLabels = new HashSet<>();
         for (EvaluationResult result : results) {
             allLabels.addAll(result.precision.keySet());
@@ -192,15 +167,11 @@ public class Evaluator {
             avgF1Score.put(label, f1);
         }
 
-        // For confusion matrix, we'll use the last one (simplified)
         Map<String, Map<String, Integer>> confusionMatrix = results.get(results.size() - 1).confusionMatrix;
 
         return new EvaluationResult(avgAccuracy, avgPrecision, avgRecall, avgF1Score, confusionMatrix);
     }
 
-    /**
-     * Class to hold evaluation results.
-     */
     public static class EvaluationResult {
         public final double accuracy;
         public final Map<String, Double> precision;
@@ -240,7 +211,6 @@ public class Evaluator {
                     recall.get(label),
                     f1Score.get(label)));
             }
-
             return sb.toString();
         }
     }

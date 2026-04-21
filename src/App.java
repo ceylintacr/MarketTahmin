@@ -17,16 +17,13 @@ public class App {
         DataLoader loader = new DataLoader();
         List<UserRecord> rawData = loader.load(filePath);
 
-        PreProcessor processor = new PreProcessor();
-        List<ProcessedRecord> data = processor.process(rawData);
+        Collections.shuffle(rawData, new Random(42));
+        int split = (int) (rawData.size() * 0.8);
+        List<UserRecord> train = rawData.subList(0, split);
+        List<UserRecord> test = rawData.subList(split, rawData.size());
 
-        Collections.shuffle(data, new Random(42));
-        int split = (int) (data.size() * 0.8);
-        List<ProcessedRecord> train = data.subList(0, split);
-        List<ProcessedRecord> test = data.subList(split, data.size());
-
-        KNNClassifier knn = new KNNClassifier(5);
-        DecisionTreeClassifier dt = new DecisionTreeClassifier();
+        KNNClassifier knn = new KNNClassifier(5, new PreProcessor());
+        DecisionTreeClassifier dt = new DecisionTreeClassifier(new PreProcessor());
         Evaluator evaluator = new Evaluator();
 
         knn.train(train);
@@ -55,7 +52,6 @@ public class App {
                 case "2":
                     System.out.println("\nLütfen Müşteri Bilgilerini Giriniz:");
                     
-                    // YAŞ GİRDİSİ EKLENDİ
                     System.out.print("Yaş: ");
                     int age = 0;
                     try {
@@ -80,11 +76,10 @@ public class App {
                         break;
                     }
 
-                    // transformSingleRecord artık 4 parametre alıyor (sonuna age eklendi)
-                    double[] newFeatures = processor.transformSingleRecord(gender, city, price, age);
+                    UserRecord newUser = new UserRecord(age, gender, city, price, "Bilinmiyor");
 
-                    String knnPrediction = knn.predict(newFeatures);
-                    String dtPrediction = dt.predict(newFeatures);
+                    String knnPrediction = knn.predict(newUser);
+                    String dtPrediction = dt.predict(newUser);
 
                     System.out.println("\n===== TAHMİN SONUÇLARI =====");
                     System.out.println("KNN (K=" + knn.getK() + ") Tahmini : Ürün Kategorisi -> " + knnPrediction);
@@ -97,11 +92,17 @@ public class App {
                     int kFold = 5;
 
                     System.out.println("\n--- KNN (" + kFold + "-Fold, K=" + knn.getK() + ") Ortalama Sonuçları ---");
-                    Evaluator.EvaluationResult cvKnn = evaluator.crossValidate(knn, data, kFold);
+                    // FIX 9: Lambda ifadesi ile her fold için yeni bir KNNClassifier objesi yaratıyoruz.
+                    Evaluator.EvaluationResult cvKnn = evaluator.crossValidate(
+                        () -> new KNNClassifier(knn.getK(), new PreProcessor()), rawData, kFold
+                    );
                     System.out.println(cvKnn);
 
                     System.out.println("--- Karar Ağacı (" + kFold + "-Fold) Ortalama Sonuçları ---");
-                    Evaluator.EvaluationResult cvDt = evaluator.crossValidate(dt, data, kFold);
+                    // FIX 9: Lambda ifadesi ile her fold için yeni bir DecisionTreeClassifier objesi yaratıyoruz.
+                    Evaluator.EvaluationResult cvDt = evaluator.crossValidate(
+                        () -> new DecisionTreeClassifier(new PreProcessor()), rawData, kFold
+                    );
                     System.out.println(cvDt);
                     break;
 
@@ -110,11 +111,11 @@ public class App {
                     int bestK = 1;
                     double bestAccuracy = 0.0;
 
-                    // 1, 3, 5, 7, 9, 11, 13, 15 değerlerini dene
                     for (int k = 1; k <= 15; k += 2) {
-                        knn.setK(k);
-                        // K-Fold kullanarak en gerçekçi doğruluğu bul
-                        Evaluator.EvaluationResult res = evaluator.crossValidate(knn, data, 5);
+                        final int currentK = k; // Java lambda kuralları gereği effectively final olmalı
+                        Evaluator.EvaluationResult res = evaluator.crossValidate(
+                            () -> new KNNClassifier(currentK, new PreProcessor()), rawData, 5
+                        );
                         System.out.printf("K = %2d deneniyor... Doğruluk: %.4f\n", k, res.accuracy);
 
                         if (res.accuracy > bestAccuracy) {
@@ -125,7 +126,7 @@ public class App {
 
                     System.out.println("\n=> BULUNAN EN İYİ K DEĞERİ: " + bestK + " (Doğruluk: "
                             + String.format("%.4f", bestAccuracy) + ")");
-                    knn.setK(bestK); // Sistemi kalıcı olarak en iyi K değerine ayarla
+                    knn.setK(bestK);
                     System.out.println("Sistem güncellendi. Artık yeni tahminler K=" + bestK + " üzerinden yapılacak.");
                     break;
 
@@ -138,8 +139,6 @@ public class App {
                     System.out.println("Geçersiz seçim! Lütfen 1-5 arası bir rakam giriniz.");
             }
         }
-
         scanner.close();
-
     }
 }
