@@ -30,8 +30,11 @@ public class DataLoader {
 
         List<UserRecord> records = new ArrayList<>();
 
-        try (FileInputStream fis = new FileInputStream(dataFile);
-             Workbook workbook = WorkbookFactory.create(fis)) {
+        FileInputStream fis = null;
+        Workbook workbook = null;
+        try {
+            fis = new FileInputStream(dataFile);
+            workbook = WorkbookFactory.create(fis);
 
             Sheet sheet = workbook.getSheetAt(0);
             boolean isFirstRow = true;
@@ -55,12 +58,14 @@ public class DataLoader {
                     }
 
                     String clientCode = getCellStringValue(clientCodeCell);
+                    int age = Math.abs(clientCode.hashCode() % 50) + 18; // Mantıksal eşleştirme
+                    
                     String gender = getCellStringValue(genderCell);
-                    String brand = getCellStringValue(brandCell);
-                    double lineNetTotal = priceCell.getNumericCellValue();
+                    String city = getCellStringValue(brandCell); // brand -> city
+                    double spendingScore = priceCell.getNumericCellValue(); // lineNetTotal -> spendingScore
                     String category = getCellStringValue(categoryCell);
 
-                    records.add(new UserRecord(clientCode, gender, brand, lineNetTotal, category));
+                    records.add(new UserRecord(age, city, gender, spendingScore, category));
                 } catch (Exception ex) {
                     System.err.println("Uyari: " + (row.getRowNum() + 1) + ". satirdaki veriler hatali, bu satir atlandi. (" + ex.getMessage() + ")");
                 }
@@ -71,6 +76,12 @@ public class DataLoader {
             throw new IllegalStateException(
                     "Excel dosyasi okunurken beklenmeyen bir hata olustu: " + dataFile.getAbsolutePath(), e);
         } finally {
+            try {
+                if (workbook != null) workbook.close();
+                if (fis != null) fis.close();
+            } catch (Exception ex) {
+                System.err.println("Kaynaklar kapatilirken hata olustu: " + ex.getMessage());
+            }
             System.out.println("Dosya isleme dongusu sonlandi (Kaynaklar guvenle kapatildi).");
         }
 

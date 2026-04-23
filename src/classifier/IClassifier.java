@@ -38,4 +38,18 @@ public interface IClassifier {
      * @return classifier name
      */
     String getName();
+
+    /**
+     * Trains the classifier and records the execution time.
+     *
+     * @param trainingData list of raw UserRecord instances
+     */
+    void trainWithTiming(List<UserRecord> trainingData);
+
+    /**
+     * Gets the execution time in milliseconds.
+     *
+     * @return execution time in ms
+     */
+    long getExecutionTimeMs();
 }

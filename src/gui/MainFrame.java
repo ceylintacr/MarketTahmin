@@ -19,6 +19,10 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
+import java.util.Random;
+import java.util.ArrayList;
+import classifier.IClassifier;
 
 public class MainFrame extends JFrame {
 
@@ -52,10 +56,8 @@ public class MainFrame extends JFrame {
     private DefaultTableModel tableModel;
 
     private DynamicChartPanel chartPanel;
-    private JButton btnBackToChart;
 
     // --- Backend State ---
-    private Map<String, Map<String, Map<String, Integer>>> modelConfusionMatrices = new HashMap<>();
     private File dataFile;
     private List<UserRecord> allData;
     private List<UserRecord> trainData;
@@ -69,6 +71,8 @@ public class MainFrame extends JFrame {
     // For Single Mode Chart
     private Map<String, Integer> singleModeCorrect = new HashMap<>();
     private Map<String, Integer> singleModeWrong = new HashMap<>();
+    private Evaluator.EvaluationResult currentResult;
+    private String currentAlgorithmName = "";
 
     public MainFrame() {
         setTitle("Market Satış Tahmin Sistemi (Yapay Zeka Destekli)");
@@ -265,23 +269,6 @@ public class MainFrame extends JFrame {
         chartPanel.setPreferredSize(new Dimension(getWidth(), 380));
         chartPanel.setBackground(Color.WHITE);
         chartPanel.setBorder(BorderFactory.createLineBorder(new Color(189, 195, 199), 1, true));
-        chartPanel.setLayout(new FlowLayout(FlowLayout.RIGHT, 15, 15));
-
-        btnBackToChart = createStyledButton("Ana Grafiğe Dön", new Color(52, 152, 219));
-        btnBackToChart.setVisible(false); // Başlangıçta gizli
-
-        btnBackToChart.addActionListener(e -> {
-            resultsTable.clearSelection(); // Tablodaki seçimi kaldır
-            if (rbCompare.isSelected()) {
-                chartPanel.showComparison(knnAccuracy, knnTime, dtAccuracy, dtTime);
-            } else {
-                String modelName = rbKnn.isSelected() ? "KNN" : "Karar Ağacı";
-                chartPanel.showSingleMode(singleModeCorrect, singleModeWrong, modelName);
-            }
-            btnBackToChart.setVisible(false); // Kendini gizle
-        });
-
-        chartPanel.add(btnBackToChart);
 
         // Main Table
         tableModel = new DefaultTableModel(0, 0) {
@@ -294,8 +281,7 @@ public class MainFrame extends JFrame {
         setupModernTable(resultsTable, false);
 
         JScrollPane scrollPane = new JScrollPane(resultsTable);
-        scrollPane.setBorder(BorderFactory
-                .createTitledBorder("Kategori Bazlı Analiz (Satıra tıklayarak Hata Dağılım Grafiğini görebilirsiniz)"));
+        scrollPane.setBorder(BorderFactory.createTitledBorder("Kategori Bazlı Analiz"));
         scrollPane.getViewport().setBackground(Color.WHITE);
         scrollPane.setPreferredSize(new Dimension(getWidth(), 300));
 
@@ -303,37 +289,6 @@ public class MainFrame extends JFrame {
         rightPanel.add(scrollPane, BorderLayout.SOUTH);
 
         add(leftPanel, BorderLayout.WEST);
-
-        // Tablo Satır Seçim Dinleyicisi
-        resultsTable.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && resultsTable.getSelectedRow() != -1) {
-                int row = resultsTable.getSelectedRow();
-                boolean isCompare = rbCompare.isSelected();
-                String algoName = "";
-                String category = "";
-
-                if (isCompare) {
-                    algoName = (String) tableModel.getValueAt(row, 0);
-                    category = (String) tableModel.getValueAt(row, 1);
-                } else {
-                    algoName = rbKnn.isSelected() ? "KNN (K=" + kValueField.getText() + ")" : "Karar Ağacı";
-                    category = (String) tableModel.getValueAt(row, 0);
-                }
-
-                Map<String, Map<String, Integer>> cm = modelConfusionMatrices.get(algoName);
-                if (cm != null) {
-                    Map<String, Integer> predictions = cm.getOrDefault(category, new HashMap<>());
-                    Map<String, Integer> errors = new HashMap<>();
-                    for (Map.Entry<String, Integer> entry : predictions.entrySet()) {
-                        if (!entry.getKey().equals(category) && entry.getValue() > 0) {
-                            errors.put(entry.getKey(), entry.getValue());
-                        }
-                    }
-                    chartPanel.showPieChart(algoName, category, errors);
-                    btnBackToChart.setVisible(true);
-                }
-            }
-        });
         add(rightPanel, BorderLayout.CENTER);
 
         // Listeners
@@ -346,6 +301,16 @@ public class MainFrame extends JFrame {
         rbCompare.addActionListener(e -> updateParamVisibility());
 
         updateParamVisibility(); // Initialize visibility states correctly
+
+        // Table Selection Listener for Dynamic Error Pie Chart
+        resultsTable.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting() && resultsTable.getSelectedRow() != -1 && !rbCompare.isSelected()) {
+                String category = (String) tableModel.getValueAt(resultsTable.getSelectedRow(), 0);
+                if (currentResult != null && currentResult.confusionMatrix.containsKey(category)) {
+                    chartPanel.showCategoryErrorPie(category, currentResult.confusionMatrix.get(category));
+                }
+            }
+        });
     }
 
     private JPanel createGroupPanel(String title) {
@@ -412,7 +377,9 @@ public class MainFrame extends JFrame {
                 Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
                 if (!isSelected) {
                     c.setBackground(row % 2 == 0 ? Color.WHITE : new Color(248, 250, 252));
+                    c.setForeground(new Color(44, 62, 80)); // Standart Koyu Gri/Siyah
                 }
+                c.setFont(new Font("Segoe UI", Font.PLAIN, 14));
                 setHorizontalAlignment(JLabel.CENTER);
                 return c;
             }
@@ -463,7 +430,14 @@ public class MainFrame extends JFrame {
                         lblSplitStatus.setText("<html><div style='text-align:center;'>" + allData.size()
                                 + " satır okundu.<br>Oranları belirleyip bölün.</div></html>");
                         btnLoadData.setEnabled(true);
-                        btnRunModel.setEnabled(true);
+                        btnRunModel.setEnabled(false); // Veriler bölünmeden çalıştırılamaz
+
+                        // Veri dağılımını hesapla ve göster
+                        Map<String, Integer> distribution = new HashMap<>();
+                        for (UserRecord r : allData) {
+                            distribution.put(r.getCategory(), distribution.getOrDefault(r.getCategory(), 0) + 1);
+                        }
+                        chartPanel.showDistribution(distribution);
                     });
                 } catch (Exception ex) {
                     SwingUtilities.invokeLater(() -> {
@@ -492,6 +466,7 @@ public class MainFrame extends JFrame {
                 return;
             }
 
+            Collections.shuffle(allData, new Random(42));
             int split = (int) (allData.size() * trainRatio / 100.0);
             trainData = allData.subList(0, split);
             testData = allData.subList(split, allData.size());
@@ -521,8 +496,7 @@ public class MainFrame extends JFrame {
         boolean isCompare = rbCompare.isSelected();
 
         if (isCompare) {
-            tableModel.setColumnIdentifiers(new String[] { "Algoritma", "Kategori", "Destek", "Doğru Tahmin",
-                    "Yanlış Tahmin", "Doğruluk (%)" });
+            tableModel.setColumnIdentifiers(new String[] { "Kategori", "Destek", "KNN Doğru Tahmin", "DT Doğru Tahmin", "KNN Yanlış Tahmin", "DT Yanlış Tahmin", "KNN Doğruluk (%)", "DT Doğruluk (%)" });
         } else {
             tableModel.setColumnIdentifiers(
                     new String[] { "Kategori", "Destek", "Doğru Tahmin", "Yanlış Tahmin", "Doğruluk (%)" });
@@ -535,9 +509,6 @@ public class MainFrame extends JFrame {
         dtTime = 0;
         singleModeCorrect.clear();
         singleModeWrong.clear();
-        modelConfusionMatrices.clear();
-        if (btnBackToChart != null)
-            btnBackToChart.setVisible(false);
 
         new Thread(() -> {
             try {
@@ -555,52 +526,74 @@ public class MainFrame extends JFrame {
                     return;
                 }
 
+                Collections.shuffle(allData, new Random(42));
                 int split = (int) (allData.size() * trainRatio / 100.0);
                 trainData = allData.subList(0, split);
                 testData = allData.subList(split, allData.size());
 
-                SwingUtilities.invokeLater(() -> {
-                    lblSplitStatus
-                            .setText("<html><div style='text-align:center;'>" + allData.size() + " satır<br>Train: "
-                                    + trainData.size() + "<br>Test: " + testData.size() + "</div></html>");
-                });
+                Evaluator.EvaluationResult resKNN = null;
+                Evaluator.EvaluationResult resDT = null;
 
+                List<IClassifier> models = new ArrayList<>();
                 if (rbKnn.isSelected() || isCompare) {
-                    runKNN(trainData, testData, isCompare);
+                    int k = Integer.parseInt(kValueField.getText());
+                    models.add(new KNNClassifier(k, new PreProcessor()));
+                }
+                
+                if (rbDt.isSelected() || isCompare) {
+                    int maxDepth = Integer.parseInt(maxDepthField.getText());
+                    models.add(new DecisionTreeClassifier(new PreProcessor(), maxDepth));
                 }
 
-                if (rbDt.isSelected() || isCompare) {
-                    runDT(trainData, testData, isCompare);
+                for (IClassifier model : models) {
+                    model.trainWithTiming(trainData);
+                    Evaluator.EvaluationResult res = evaluator.evaluate(model, testData);
+                    
+                    if (model instanceof KNNClassifier) {
+                        resKNN = res;
+                        knnAccuracy = res.accuracy;
+                        knnTime = model.getExecutionTimeMs();
+                    } else if (model instanceof DecisionTreeClassifier) {
+                        resDT = res;
+                        dtAccuracy = res.accuracy;
+                        dtTime = model.getExecutionTimeMs();
+                    }
                 }
 
                 long endMem = getUsedMemoryMB();
                 long memDiff = endMem - startMem;
-                if (memDiff <= 0)
-                    memDiff = (long) (Math.random() * 3) + 2; // Eğer GC çalışıp ölçümü eksiye düşürürse tahmini makul
-                                                              // bir değer göster (2-4 MB)
-                final long finalMemDiff = memDiff;
+                final long finalMemDiff = Math.max(0, memDiff);
+
+                final Evaluator.EvaluationResult finalResKNN = resKNN;
+                final Evaluator.EvaluationResult finalResDT = resDT;
 
                 SwingUtilities.invokeLater(() -> {
+                    btnRunModel.setEnabled(true);
+                    btnSelectFile.setEnabled(true);
+                    
                     if (isCompare) {
+                        extractMetricsCompare(finalResKNN, finalResDT);
                         lblOverallAccuracy.setText(String.format("Doğruluk = KNN: %%%.1f | DT: %%%.1f",
                                 knnAccuracy * 100, dtAccuracy * 100));
                         lblExecutionTime.setText(String.format("Süre: KNN %d ms | DT %d ms", knnTime, dtTime));
+                        chartPanel.showComparison(knnAccuracy, knnTime, dtAccuracy, dtTime);
                     } else if (rbKnn.isSelected()) {
+                        currentResult = finalResKNN;
+                        currentAlgorithmName = "KNN";
+                        extractMetrics(finalResKNN);
                         lblOverallAccuracy.setText(String.format("Genel Doğruluk: %%%.1f", knnAccuracy * 100));
                         lblExecutionTime.setText(String.format("Tahmin Süresi: %d ms", knnTime));
+                        chartPanel.showSingleMode(singleModeCorrect, singleModeWrong, "KNN (K=" + kValueField.getText() + ")");
                     } else {
+                        currentResult = finalResDT;
+                        currentAlgorithmName = "Decision Tree";
+                        extractMetrics(finalResDT);
                         lblOverallAccuracy.setText(String.format("Genel Doğruluk: %%%.1f", dtAccuracy * 100));
                         lblExecutionTime.setText(String.format("Tahmin Süresi: %d ms", dtTime));
+                        chartPanel.showSingleMode(singleModeCorrect, singleModeWrong, "Karar Ağacı");
                     }
 
                     lblMemoryUsage.setText(String.format("Yaklaşık Bellek: %d MB", finalMemDiff));
-
-                    if (isCompare) {
-                        chartPanel.showComparison(knnAccuracy, knnTime, dtAccuracy, dtTime);
-                    } else {
-                        String modelName = rbKnn.isSelected() ? "KNN" : "Karar Ağacı";
-                        chartPanel.showSingleMode(singleModeCorrect, singleModeWrong, modelName);
-                    }
                     chartPanel.revalidate();
                     chartPanel.repaint();
                 });
@@ -616,14 +609,12 @@ public class MainFrame extends JFrame {
         }).start();
     }
 
-    private void extractMetrics(Evaluator.EvaluationResult res, String algoName, boolean isCompare) {
+    private void extractMetrics(Evaluator.EvaluationResult res) {
         Map<String, Map<String, Integer>> cm = res.confusionMatrix;
-        modelConfusionMatrices.put(algoName, cm);
 
         java.util.List<String> categories = new java.util.ArrayList<>(res.precision.keySet());
-        java.util.Collections.sort(categories); // İsimleri alfabetik sırala
+        java.util.Collections.sort(categories); 
 
-        // Ana Tablo Güncellemesi
         for (String category : categories) {
             if (!cm.containsKey(category))
                 continue;
@@ -641,47 +632,62 @@ public class MainFrame extends JFrame {
             double catAcc = (support) == 0 ? 0 : ((double) tp / support) * 100.0;
             String accStr = String.format("%%% .1f", catAcc);
 
-            if (!isCompare) {
-                singleModeCorrect.put(category, tp);
-                singleModeWrong.put(category, fn);
-                tableModel.addRow(new Object[] { category, support, tp, fn, accStr });
-            } else {
-                tableModel.addRow(new Object[] { algoName, category, support, tp, fn, accStr });
-            }
+            singleModeCorrect.put(category, tp);
+            singleModeWrong.put(category, fn);
+            tableModel.addRow(new Object[] { category, support, tp, fn, accStr });
         }
     }
 
-    private void runKNN(List<UserRecord> train, List<UserRecord> test, boolean isCompare) {
-        int k = Integer.parseInt(kValueField.getText());
-        KNNClassifier knn = new KNNClassifier(k, new PreProcessor());
-        knn.trainWithTiming(train);
-        Evaluator.EvaluationResult res = evaluator.evaluate(knn, test);
+    private void extractMetricsCompare(Evaluator.EvaluationResult resKNN, Evaluator.EvaluationResult resDT) {
+        Map<String, Map<String, Integer>> cmKNN = resKNN.confusionMatrix;
+        Map<String, Map<String, Integer>> cmDT = resDT.confusionMatrix;
 
-        knnAccuracy = res.accuracy;
-        knnTime = knn.getExecutionTimeMs();
+        java.util.Set<String> allCategories = new java.util.HashSet<>();
+        allCategories.addAll(resKNN.precision.keySet());
+        allCategories.addAll(resDT.precision.keySet());
 
-        SwingUtilities.invokeLater(() -> extractMetrics(res, "KNN (K=" + k + ")", isCompare));
+        java.util.List<String> categories = new java.util.ArrayList<>(allCategories);
+        java.util.Collections.sort(categories); 
+
+        for (String category : categories) {
+            int tpKNN = cmKNN.containsKey(category) ? cmKNN.get(category).getOrDefault(category, 0) : 0;
+            int fnKNN = 0;
+            if (cmKNN.containsKey(category)) {
+                for (Map.Entry<String, Integer> entry : cmKNN.get(category).entrySet()) {
+                    if (!entry.getKey().equals(category)) fnKNN += entry.getValue();
+                }
+            }
+
+            int tpDT = cmDT.containsKey(category) ? cmDT.get(category).getOrDefault(category, 0) : 0;
+            int fnDT = 0;
+            if (cmDT.containsKey(category)) {
+                for (Map.Entry<String, Integer> entry : cmDT.get(category).entrySet()) {
+                    if (!entry.getKey().equals(category)) fnDT += entry.getValue();
+                }
+            }
+
+            int support = tpKNN + fnKNN; // Test verisi ikisi için de aynıdır
+            
+            double accKNN = (support) == 0 ? 0 : ((double) tpKNN / support) * 100.0;
+            double accDT = (support) == 0 ? 0 : ((double) tpDT / support) * 100.0;
+
+            String accStrKNN = String.format("%%% .1f", accKNN);
+            String accStrDT = String.format("%%% .1f", accDT);
+
+            tableModel.addRow(new Object[] { category, support, tpKNN, tpDT, fnKNN, fnDT, accStrKNN, accStrDT });
+        }
     }
 
-    private void runDT(List<UserRecord> train, List<UserRecord> test, boolean isCompare) {
-        int maxDepth = Integer.parseInt(maxDepthField.getText());
-        DecisionTreeClassifier dt = new DecisionTreeClassifier(new PreProcessor(), maxDepth);
-        dt.trainWithTiming(train);
-        Evaluator.EvaluationResult res = evaluator.evaluate(dt, test);
-
-        dtAccuracy = res.accuracy;
-        dtTime = dt.getExecutionTimeMs();
-
-        SwingUtilities.invokeLater(() -> extractMetrics(res, "Karar Ağacı", isCompare));
-    }
+    // runKNN ve runDT metotları polymorphism ve for döngüsü ile executeModels() içerisinde birleştirildiği için silinmiştir.
 
     // DİNAMİK GRAFİK PANELİ
     class DynamicChartPanel extends JPanel {
         enum ChartMode {
-            SINGLE, COMPARISON, PIE_CHART
+            SINGLE, COMPARISON, DISTRIBUTION, PIE_ACCURACY, CATEGORY_ERROR_PIE
         }
 
         private ChartMode mode = ChartMode.COMPARISON;
+        private Map<String, Integer> distributionMap = new HashMap<>();
 
         private double kAcc, dAcc;
         private long kTime, dTime;
@@ -689,16 +695,56 @@ public class MainFrame extends JFrame {
         private Map<String, Integer> correctMap = new HashMap<>();
         private Map<String, Integer> wrongMap = new HashMap<>();
         private String singleModelName = "";
+        private double currentAccuracy = 0;
+        private String selectedCategory = "";
+        private Map<String, Integer> categoryErrors = new HashMap<>();
+        private JButton btnBack;
 
-        private String pieAlgoName = "";
-        private String pieCategory = "";
-        private Map<String, Integer> pieErrors = new HashMap<>();
+        public DynamicChartPanel() {
+            setLayout(null);
+            btnBack = createStyledButton("Ana Grafiğe Dön", new Color(44, 62, 80));
+            btnBack.setBounds(20, 45, 150, 30);
+            btnBack.setVisible(false);
+            btnBack.addActionListener(e -> {
+                if (!singleModeCorrect.isEmpty()) {
+                    showSingleMode(singleModeCorrect, singleModeWrong, currentAlgorithmName);
+                }
+            });
+            add(btnBack);
+        }
 
         public void showSingleMode(Map<String, Integer> correct, Map<String, Integer> wrong, String modelName) {
             this.mode = ChartMode.SINGLE;
-            this.correctMap = correct;
-            this.wrongMap = wrong;
+            this.correctMap = new HashMap<>(correct);
+            this.wrongMap = new HashMap<>(wrong);
             this.singleModelName = modelName;
+            if (btnBack != null) btnBack.setVisible(false);
+            revalidate();
+            repaint();
+        }
+
+        public void showCategoryErrorPie(String category, Map<String, Integer> errors) {
+            this.mode = ChartMode.CATEGORY_ERROR_PIE;
+            this.selectedCategory = category;
+            this.categoryErrors = new HashMap<>(errors);
+            if (btnBack != null) btnBack.setVisible(true);
+            revalidate();
+            repaint();
+        }
+
+        public void showAccuracyPie(double accuracy, String modelName) {
+            this.mode = ChartMode.PIE_ACCURACY;
+            this.currentAccuracy = accuracy;
+            this.singleModelName = modelName;
+            revalidate();
+            repaint();
+        }
+
+        public void showDistribution(Map<String, Integer> dist) {
+            this.mode = ChartMode.DISTRIBUTION;
+            this.distributionMap = dist;
+            revalidate();
+            repaint();
         }
 
         public void showComparison(double kA, long kT, double dA, long dT) {
@@ -707,13 +753,6 @@ public class MainFrame extends JFrame {
             this.dAcc = dA;
             this.kTime = kT;
             this.dTime = dT;
-        }
-
-        public void showPieChart(String algoName, String category, Map<String, Integer> errors) {
-            this.mode = ChartMode.PIE_CHART;
-            this.pieAlgoName = algoName;
-            this.pieCategory = category;
-            this.pieErrors = errors;
             revalidate();
             repaint();
         }
@@ -736,8 +775,12 @@ public class MainFrame extends JFrame {
             } else if (mode == ChartMode.SINGLE) {
                 if (!correctMap.isEmpty())
                     drawSingleModeChart(g2d, w, h);
-            } else if (mode == ChartMode.PIE_CHART) {
-                drawPieChart(g2d, w, h);
+            } else if (mode == ChartMode.DISTRIBUTION) {
+                drawDistributionChart(g2d, w, h);
+            } else if (mode == ChartMode.PIE_ACCURACY) {
+                drawPieChart(g2d, w, h, currentAccuracy);
+            } else if (mode == ChartMode.CATEGORY_ERROR_PIE) {
+                drawCategoryErrorPie(g2d, w, h);
             }
         }
 
@@ -804,6 +847,136 @@ public class MainFrame extends JFrame {
             g2d.drawString("Yanlış Tahmin", 160, 58);
         }
 
+        private void drawDistributionChart(Graphics2D g2d, int w, int h) {
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
+            g2d.setColor(new Color(44, 62, 80));
+            g2d.drawString("Veri Seti Kategori Dağılımı", 20, 30);
+
+            if (distributionMap == null || distributionMap.isEmpty())
+                return;
+
+            int maxBarHeight = h - 220;
+            int numCat = distributionMap.size();
+            int barW = Math.min(60, (w - 100) / (numCat * 2));
+
+            int maxVal = 1;
+            for (int count : distributionMap.values()) {
+                maxVal = Math.max(maxVal, count);
+            }
+
+            g2d.setColor(Color.LIGHT_GRAY);
+            g2d.drawLine(50, h - 120, w - 20, h - 120);
+
+            int xPos = 80;
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            List<String> sortedKeys = new ArrayList<>(distributionMap.keySet());
+            Collections.sort(sortedKeys);
+
+            for (String cat : sortedKeys) {
+                int count = distributionMap.get(cat);
+                int bHeight = (int) (((double) count / maxVal) * maxBarHeight);
+
+                g2d.setColor(new Color(52, 152, 219));
+                g2d.fillRoundRect(xPos, h - 120 - bHeight, barW, bHeight, 8, 8);
+
+                g2d.setColor(Color.DARK_GRAY);
+                g2d.drawString(String.valueOf(count), xPos + (barW / 4), h - 125 - bHeight);
+
+                g2d.setColor(Color.BLACK);
+                Graphics2D gText = (Graphics2D) g2d.create();
+                FontMetrics fm = gText.getFontMetrics();
+                int textWidth = fm.stringWidth(cat);
+                gText.translate(xPos + (barW / 2), h - 110);
+                gText.rotate(-Math.PI / 4);
+                gText.drawString(cat, -textWidth, 5);
+                gText.dispose();
+
+                xPos += barW * 2;
+            }
+        }
+
+        private void drawPieChart(Graphics2D g2d, int w, int h, double accuracy) {
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
+            g2d.setColor(new Color(44, 62, 80));
+            g2d.drawString(singleModelName + " - Performans Analizi (Accuracy vs Error)", 20, 30);
+
+            int size = Math.min(w, h) - 150;
+            int x = (w - size) / 2;
+            int y = (h - size) / 2 + 20;
+
+            int accAngle = (int) (accuracy * 360);
+            int errAngle = 360 - accAngle;
+
+            // Doğruluk Dilimi
+            g2d.setColor(new Color(52, 152, 219));
+            g2d.fillArc(x, y, size, size, 0, accAngle);
+
+            // Hata Dilimi
+            g2d.setColor(new Color(231, 76, 60));
+            g2d.fillArc(x, y, size, size, accAngle, errAngle);
+
+            // Legend
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            g2d.setColor(new Color(52, 152, 219));
+            g2d.fillRect(20, 60, 15, 15);
+            g2d.setColor(Color.BLACK);
+            g2d.drawString(String.format("Doğruluk: %%%.1f", accuracy * 100), 40, 73);
+
+            g2d.setColor(new Color(231, 76, 60));
+            g2d.fillRect(20, 85, 15, 15);
+            g2d.setColor(Color.BLACK);
+            g2d.drawString(String.format("Hata Oranı: %%%.1f", (1 - accuracy) * 100), 40, 98);
+        }
+
+        private void drawCategoryErrorPie(Graphics2D g2d, int w, int h) {
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
+            g2d.setColor(new Color(44, 62, 80));
+            g2d.drawString(selectedCategory + " Kategorisi - Hata Dağılım Analizi", 20, 30);
+
+            int totalErrors = 0;
+            for (Map.Entry<String, Integer> e : categoryErrors.entrySet()) {
+                if (!e.getKey().equals(selectedCategory)) {
+                    totalErrors += e.getValue();
+                }
+            }
+
+            if (totalErrors == 0) {
+                g2d.setFont(new Font("Segoe UI", Font.BOLD, 24));
+                g2d.setColor(new Color(39, 174, 96));
+                g2d.drawString("MÜKEMMEL TAHMİN: HATA BULUNAMADI!", w / 4, h / 2);
+                return;
+            }
+
+            int size = Math.min(w, h) - 200;
+            int x = (w - size) / 2;
+            int y = (h - size) / 2 + 30;
+
+            int startAngle = 0;
+            Color[] colors = { new Color(231, 76, 60), new Color(241, 196, 15), new Color(155, 89, 182),
+                               new Color(52, 152, 219), new Color(230, 126, 34), new Color(149, 165, 166) };
+            int cIdx = 0;
+
+            int legendY = 100;
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 13));
+
+            for (Map.Entry<String, Integer> e : categoryErrors.entrySet()) {
+                if (e.getKey().equals(selectedCategory) || e.getValue() == 0) continue;
+
+                int angle = (int) Math.round(((double) e.getValue() / totalErrors) * 360);
+                g2d.setColor(colors[cIdx % colors.length]);
+                g2d.fillArc(x, y, size, size, startAngle, angle);
+
+                // Legend
+                g2d.fillRect(w - 200, legendY, 15, 15);
+                g2d.setColor(Color.BLACK);
+                g2d.drawString(e.getKey() + " (" + e.getValue() + ")", w - 180, legendY + 12);
+                
+                startAngle += angle;
+                cIdx++;
+                legendY += 25;
+            }
+        }
+
         private void drawComparisonChart(Graphics2D g2d, int w, int h) {
             g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
             g2d.setColor(new Color(44, 62, 80));
@@ -851,65 +1024,6 @@ public class MainFrame extends JFrame {
             g2d.fillRect(140, 45, 15, 15);
             g2d.setColor(Color.BLACK);
             g2d.drawString("Çalışma Süresi", 160, 58);
-        }
-
-        private void drawPieChart(Graphics2D g2d, int w, int h) {
-            g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
-            g2d.setColor(new Color(44, 62, 80));
-            g2d.drawString(pieAlgoName + " - '" + pieCategory + "' Kategorisi Hata Dağılımı", 20, 30);
-
-            if (pieErrors.isEmpty()) {
-                g2d.setFont(new Font("Segoe UI", Font.BOLD, 16));
-                g2d.setColor(Color.BLACK);
-                g2d.drawString("Bu kategoride hiç hata yapılmadı! (%100 Başarı)", w / 2 - 200, h / 2);
-                return;
-            }
-
-            int totalErrors = pieErrors.values().stream().mapToInt(Integer::intValue).sum();
-            int pieSize = Math.min(w, h) - 120;
-            int x = w / 4 - pieSize / 2 + 30;
-            int y = h / 2 - pieSize / 2 + 20;
-
-            int startAngle = 0;
-            Color[] colors = {
-                    new Color(231, 76, 60), new Color(52, 152, 219), new Color(155, 89, 182),
-                    new Color(241, 196, 15), new Color(230, 126, 34), new Color(26, 188, 156),
-                    new Color(52, 73, 94), new Color(149, 165, 166), new Color(211, 84, 0),
-                    new Color(39, 174, 96)
-            };
-
-            int legendX = x + pieSize + 80;
-            int legendY = y + 20;
-            int colorIndex = 0;
-            int angleSum = 0;
-
-            for (Map.Entry<String, Integer> entry : pieErrors.entrySet()) {
-                int value = entry.getValue();
-                String category = entry.getKey();
-                int angle = (int) Math.round((value / (double) totalErrors) * 360.0);
-
-                // Ensure the pie completes exactly 360 degrees on the last segment to avoid
-                // gaps
-                if (colorIndex == pieErrors.size() - 1) {
-                    angle = 360 - angleSum;
-                }
-                angleSum += angle;
-
-                Color c = colors[colorIndex % colors.length];
-                g2d.setColor(c);
-                g2d.fillArc(x, y, pieSize, pieSize, startAngle, angle);
-
-                g2d.fillRect(legendX, legendY, 15, 15);
-                g2d.setColor(Color.BLACK);
-                g2d.setFont(new Font("Segoe UI", Font.BOLD, 13));
-                String label = String.format("%s yerine '%s' dedi (%d hata, %%%.1f)", pieCategory, category, value,
-                        (value * 100.0 / totalErrors));
-                g2d.drawString(label, legendX + 25, legendY + 13);
-
-                startAngle += angle;
-                legendY += 25;
-                colorIndex++;
-            }
         }
     }
 
