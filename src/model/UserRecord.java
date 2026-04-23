@@ -8,11 +8,11 @@ public class UserRecord {
     // Fields — private + final (immutable after construction)
     // -------------------------------------------------------------------------
 
-    private final int age;              // ← Yaş değişkeni eklendi
+    private final String clientCode;
     private final String gender;
-    private final String city;
-    private final double totalPrice;
-    private final String category;      // ← label / class
+    private final String brand;
+    private final double lineNetTotal;
+    private final String category;      // target label
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -21,80 +21,56 @@ public class UserRecord {
     /**
      * Creates a new UserRecord.
      *
-     * @param age        user's age (must be > 0)
-     * @param gender     raw gender string  ("Male" | "Female" | "E" | "K")
-     * @param city       raw city name
-     * @param totalPrice purchase total (must be ≥ 0)
-     * @param category   target class label (must not be null/blank)
+     * @param clientCode   Müşteri ID
+     * @param gender       Cinsiyet ("Male" | "Female" | "E" | "K")
+     * @param brand        Marka
+     * @param lineNetTotal Toplam Ücret (must be ≥ 0)
+     * @param category     Ürün Kategorisi (must not be null/blank)
      * @throws IllegalArgumentException if any argument violates its contract
      */
-    public UserRecord(int age, String gender, String city, double totalPrice, String category) {
-
-        // Basic validation — keeps bad data out of the pipeline early
-        if (age <= 0) {
-            throw new IllegalArgumentException("age must be > 0, got: " + age);
+    public UserRecord(String clientCode, String gender, String brand, double lineNetTotal, String category) {
+        if (clientCode == null || clientCode.isBlank()) {
+            throw new IllegalArgumentException("clientCode must not be null or blank");
         }
         if (gender == null || gender.isBlank()) {
             throw new IllegalArgumentException("gender must not be null or blank");
         }
-        if (city == null || city.isBlank()) {
-            throw new IllegalArgumentException("city must not be null or blank");
+        if (brand == null || brand.isBlank()) {
+            throw new IllegalArgumentException("brand must not be null or blank");
         }
-        if (totalPrice < 0) {
-            throw new IllegalArgumentException("totalPrice must be >= 0, got: " + totalPrice);
+        if (lineNetTotal < 0) {
+            throw new IllegalArgumentException("lineNetTotal must be >= 0, got: " + lineNetTotal);
         }
         if (category == null || category.isBlank()) {
             throw new IllegalArgumentException("category must not be null or blank");
         }
 
-        this.age        = age;
-        this.gender     = gender.trim();
-        this.city       = city.trim();
-        this.totalPrice = totalPrice;
-        this.category   = category.trim();
+        this.clientCode   = clientCode.trim();
+        this.gender       = gender.trim();
+        this.brand        = brand.trim();
+        this.lineNetTotal = lineNetTotal;
+        this.category     = category.trim();
     }
 
     // -------------------------------------------------------------------------
     // Getters (no setters — immutable by design)
     // -------------------------------------------------------------------------
 
-    /** @return user's age */
-    public int getAge() {
-        return age;
-    }
-
-    /** @return raw gender string */
-    public String getGender() {
-        return gender;
-    }
-
-    /** @return raw city name */
-    public String getCity() {
-        return city;
-    }
-
-    /** @return purchase total price */
-    public double getTotalPrice() {
-        return totalPrice;
-    }
-
-    /** @return target class label */
-    public String getCategory() {
-        return category;
-    }
+    public String getClientCode() { return clientCode; }
+    public String getGender() { return gender; }
+    public String getBrand() { return brand; }
+    public double getLineNetTotal() { return lineNetTotal; }
+    public String getCategory() { return category; }
 
     // -------------------------------------------------------------------------
     // Object overrides
     // -------------------------------------------------------------------------
 
-    /**
-     * Human-readable representation — useful for debugging / logging.
-     */
     @Override
     public String toString() {
         return String.format(
-            "UserRecord{age=%d, gender='%s', city='%s', totalPrice=%.2f, category='%s'}",
-            age, gender, city, totalPrice, category
+            "UserRecord{clientCode='%s', gender='%s', brand='%s', lineNetTotal=%.2f, category='%s'}",
+            clientCode, gender, brand, lineNetTotal, category
         );
     }
 
@@ -103,15 +79,15 @@ public class UserRecord {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
         UserRecord that = (UserRecord) obj;
-        return age == that.age &&
-               Double.compare(that.totalPrice, totalPrice) == 0 &&
+        return Double.compare(that.lineNetTotal, lineNetTotal) == 0 &&
+               Objects.equals(clientCode, that.clientCode) &&
                Objects.equals(gender, that.gender) &&
-               Objects.equals(city, that.city) &&
+               Objects.equals(brand, that.brand) &&
                Objects.equals(category, that.category);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(age, gender, city, totalPrice, category);
+        return Objects.hash(clientCode, gender, brand, lineNetTotal, category);
     }
 }

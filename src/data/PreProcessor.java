@@ -4,42 +4,35 @@ import java.util.*;
 import model.UserRecord;
 
 public class PreProcessor {
-    private Map<String, Integer> cityIndex = new HashMap<>();
+    private Map<String, Integer> brandIndex = new HashMap<>();
     
-    // Fiyat ve Yaş için Min-Max Değişkenleri
+    // Fiyat için Min-Max Değişkenleri
     private double minPrice = Double.MAX_VALUE, maxPrice = -Double.MAX_VALUE, priceRange = 1.0;
-    private double minAge = Double.MAX_VALUE, maxAge = -Double.MAX_VALUE, ageRange = 1.0;
     
-    private int cityCount = 0;
+    private int brandCount = 0;
     private boolean isFitted = false;
 
     /**
      * FIT: SADECE TRAIN VERİSİ İLE ÇALIŞIR.
-     * Verisetinin istatistiklerini (Min, Max, Şehir Listesi) öğrenir.
+     * Verisetinin istatistiklerini (Min, Max, Marka Listesi) öğrenir.
      */
     public void fit(List<UserRecord> trainData) {
-        cityIndex.clear();
+        brandIndex.clear();
         minPrice = Double.MAX_VALUE; maxPrice = -Double.MAX_VALUE;
-        minAge = Double.MAX_VALUE; maxAge = -Double.MAX_VALUE;
 
-        // 1. Aşama: Şehirleri indeksle ve Fiyat & Yaş için Min-Max değerlerini bul
+        // 1. Aşama: Markaları indeksle ve Fiyat için Min-Max değerlerini bul
         for (UserRecord r : trainData) {
-            cityIndex.putIfAbsent(r.getCity(), cityIndex.size());
+            brandIndex.putIfAbsent(r.getBrand(), brandIndex.size());
             
-            double price = r.getTotalPrice();
+            double price = r.getLineNetTotal();
             minPrice = Math.min(minPrice, price);
             maxPrice = Math.max(maxPrice, price);
-
-            double age = r.getAge();
-            minAge = Math.min(minAge, age);
-            maxAge = Math.max(maxAge, age);
         }
         
         // Aralıkları hesapla (Sıfıra bölünme hatasını önle)
         priceRange = (maxPrice - minPrice == 0) ? 1 : (maxPrice - minPrice);
-        ageRange = (maxAge - minAge == 0) ? 1 : (maxAge - minAge);
         
-        cityCount = cityIndex.size();
+        brandCount = brandIndex.size();
         isFitted = true;
     }
 
@@ -56,21 +49,18 @@ public class PreProcessor {
         double genderVal = (user.getGender().equalsIgnoreCase("E") || user.getGender().equalsIgnoreCase("Male")) ? 1.0 : 0.0;
         
         // Fiyatı Min-Max formülü ile normalize et
-        double normPrice = (user.getTotalPrice() - minPrice) / priceRange;
+        double normPrice = (user.getLineNetTotal() - minPrice) / priceRange;
 
-        // Yaşı Min-Max formülü ile normalize et
-        double normAge = (user.getAge() - minAge) / ageRange;
-
-        // Feature vektörü: [gender, normPrice, normAge, one-hot cities...]
-        double[] features = new double[3 + cityCount];
+        // Feature vektörü: [gender, normPrice, one-hot brands...]
+        // Not: clientCode tahmin için bir özellik (feature) değil, eşsiz bir kimliktir, bu yüzden vektöre eklenmez.
+        double[] features = new double[2 + brandCount];
         features[0] = genderVal;
         features[1] = normPrice;
-        features[2] = normAge; 
 
-        // Şehir bilgisini One-Hot Encoding ile vektöre yerleştir
-        // Eğer test verisinde daha önce (train'de) hiç görmediğimiz bir şehir varsa sıfır kalır (Out-Of-Vocabulary koruması)
-        if (cityIndex.containsKey(user.getCity())) {
-            features[3 + cityIndex.get(user.getCity())] = 1.0;
+        // Marka bilgisini One-Hot Encoding ile vektöre yerleştir
+        // Eğer test verisinde daha önce (train'de) hiç görmediğimiz bir marka varsa sıfır kalır (Out-Of-Vocabulary koruması)
+        if (brandIndex.containsKey(user.getBrand())) {
+            features[2 + brandIndex.get(user.getBrand())] = 1.0;
         }
         
         return features;

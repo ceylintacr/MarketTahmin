@@ -9,13 +9,17 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
 
     private Node root;
     private PreProcessor preProcessor;
-    private int maxDepth = 6; 
+    private int maxDepth;
 
-    public DecisionTreeClassifier(PreProcessor preProcessor) {
+    public DecisionTreeClassifier(PreProcessor preProcessor, int maxDepth) {
         if (preProcessor == null) {
             throw new IllegalArgumentException("PreProcessor cannot be null");
         }
+        if (maxDepth <= 0) {
+            throw new IllegalArgumentException("maxDepth must be positive");
+        }
         this.preProcessor = preProcessor;
+        this.maxDepth = maxDepth;
     }
 
     @Override
