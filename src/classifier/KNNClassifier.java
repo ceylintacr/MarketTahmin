@@ -7,43 +7,44 @@ import java.util.*;
 
 public class KNNClassifier extends BaseAlgorithm {
 
-    private List<ProcessedRecord> trainingData;
-    private PreProcessor preProcessor;
+    private List<ProcessedRecord> islenmisEgitimVerisi;
+    private PreProcessor onIsleyici;
     private int k;
 
-    public KNNClassifier(int k, PreProcessor preProcessor) {
+    public KNNClassifier(int k, PreProcessor onIsleyici) {
         if (k <= 0) {
             throw new IllegalArgumentException("k must be positive");
         }
-        if (preProcessor == null) {
+        if (onIsleyici == null) {
             throw new IllegalArgumentException("PreProcessor cannot be null");
         }
         this.k = k;
-        this.preProcessor = preProcessor;
+        this.onIsleyici = onIsleyici;
     }
 
     @Override
-    public void train(List<UserRecord> rawTrainingData) {
-        if (rawTrainingData == null || rawTrainingData.isEmpty()) {
+    public void egit(List<UserRecord> hamEgitimVerisi) {
+        if (hamEgitimVerisi == null || hamEgitimVerisi.isEmpty()) {
             throw new IllegalArgumentException("Training data cannot be null or empty");
         }
-        
-        // 1. DATA LEAKAGE FIX: Önce sadece eğitim verisiyle modeli (scaling, encoding) FIT et.
-        this.preProcessor.fit(rawTrainingData);
-        
+
+        // 1. DATA LEAKAGE FIX: Önce sadece eğitim verisiyle modeli (scaling, encoding)
+        // FIT et.
+        this.onIsleyici.fit(hamEgitimVerisi);
+
         // 2. Eğitim verilerini TRANSFORM et ve sınıflandırıcıya kaydet.
-        this.trainingData = new ArrayList<>();
-        for (UserRecord user : rawTrainingData) {
-            double[] features = this.preProcessor.transform(user);
-            this.trainingData.add(new ProcessedRecord(features, user.getCategory()));
+        this.islenmisEgitimVerisi = new ArrayList<>();
+        for (UserRecord user : hamEgitimVerisi) {
+            double[] ozellikler = this.onIsleyici.transform(user);
+            this.islenmisEgitimVerisi.add(new ProcessedRecord(ozellikler, user.getCategory()));
         }
-        
-        System.out.println("[KNNClassifier] Trained on " + trainingData.size() + " records with k=" + k);
+
+        System.out.println("[KNNClassifier] Trained on " + islenmisEgitimVerisi.size() + " records with k=" + k);
     }
 
     @Override
     public String predict(UserRecord user) {
-        if (trainingData == null || preProcessor == null) {
+        if (islenmisEgitimVerisi == null || onIsleyici == null) {
             throw new IllegalStateException("Classifier must be trained before prediction");
         }
         if (user == null) {
@@ -51,23 +52,23 @@ public class KNNClassifier extends BaseAlgorithm {
         }
 
         // Test verisini veya tekil müşteriyi mevcut eğitim istatistikleriyle TRANSFORM et.
-        double[] features = preProcessor.transform(user);
+        double[] ozellikler = onIsleyici.transform(user);
 
-        List<Neighbor> neighbors = new ArrayList<>();
-        for (ProcessedRecord record : trainingData) {
-            double distance = euclideanDistance(features, record.getFeatures());
-            neighbors.add(new Neighbor(distance, record.getLabel()));
+        List<Komsu> komsular = new ArrayList<>();
+        for (ProcessedRecord record : islenmisEgitimVerisi) {
+            double mesafe = oklidMesafesiHesapla(ozellikler, record.getFeatures());
+            komsular.add(new Komsu(mesafe, record.getLabel()));
         }
 
-        neighbors.sort(Comparator.comparingDouble(n -> n.distance));
+        komsular.sort(Comparator.comparingDouble(n -> n.mesafe));
 
-        Map<String, Integer> labelCounts = new HashMap<>();
-        for (int i = 0; i < Math.min(k, neighbors.size()); i++) {
-            String label = neighbors.get(i).label;
-            labelCounts.put(label, labelCounts.getOrDefault(label, 0) + 1);
+        Map<String, Integer> etiketSayilari = new HashMap<>();
+        for (int i = 0; i < Math.min(k, komsular.size()); i++) {
+            String etiket = komsular.get(i).etiket;
+            etiketSayilari.put(etiket, etiketSayilari.getOrDefault(etiket, 0) + 1);
         }
 
-        return labelCounts.entrySet().stream()
+        return etiketSayilari.entrySet().stream()
                 .max(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
                 .orElse("Unknown");
@@ -75,37 +76,37 @@ public class KNNClassifier extends BaseAlgorithm {
 
     @Override
     public List<String> predict(List<UserRecord> users) {
-        List<String> predictions = new ArrayList<>();
+        List<String> tahminler = new ArrayList<>();
         for (UserRecord user : users) {
-            predictions.add(predict(user));
+            tahminler.add(predict(user));
         }
-        return predictions;
+        return tahminler;
     }
 
     @Override
-    public String getName() {
+    public String isimGetir() {
         return "K-Nearest Neighbors (k=" + k + ")";
     }
 
-    private double euclideanDistance(double[] a, double[] b) {
+    private double oklidMesafesiHesapla(double[] a, double[] b) {
         if (a.length != b.length) {
             throw new IllegalArgumentException("Feature vectors must have same length");
         }
-        double sum = 0.0;
+        double toplam = 0.0;
         for (int i = 0; i < a.length; i++) {
-            double diff = a[i] - b[i];
-            sum += diff * diff;
+            double fark = a[i] - b[i];
+            toplam += fark * fark;
         }
-        return Math.sqrt(sum);
+        return Math.sqrt(toplam);
     }
 
-    private static class Neighbor {
-        final double distance;
-        final String label;
+    private static class Komsu {
+        final double mesafe;
+        final String etiket;
 
-        Neighbor(double distance, String label) {
-            this.distance = distance;
-            this.label = label;
+        Komsu(double mesafe, String etiket) {
+            this.mesafe = mesafe;
+            this.etiket = etiket;
         }
     }
 

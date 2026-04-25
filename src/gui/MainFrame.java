@@ -541,22 +541,22 @@ public class MainFrame extends JFrame {
                 }
                 
                 if (rbDt.isSelected() || isCompare) {
-                    int maxDepth = Integer.parseInt(maxDepthField.getText());
-                    models.add(new DecisionTreeClassifier(new PreProcessor(), maxDepth));
+                    int maksDerinlik = Integer.parseInt(maxDepthField.getText());
+                    models.add(new DecisionTreeClassifier(new PreProcessor(), maksDerinlik));
                 }
 
                 for (IClassifier model : models) {
-                    model.trainWithTiming(trainData);
+                    model.calismaSuresiniHesapla(trainData);
                     Evaluator.EvaluationResult res = evaluator.evaluate(model, testData);
                     
                     if (model instanceof KNNClassifier) {
                         resKNN = res;
                         knnAccuracy = res.accuracy;
-                        knnTime = model.getExecutionTimeMs();
+                        knnTime = model.getCalismaSuresi();
                     } else if (model instanceof DecisionTreeClassifier) {
                         resDT = res;
                         dtAccuracy = res.accuracy;
-                        dtTime = model.getExecutionTimeMs();
+                        dtTime = model.getCalismaSuresi();
                     }
                 }
 

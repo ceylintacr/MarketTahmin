@@ -4,24 +4,19 @@ import model.UserRecord;
 import java.util.List;
 
 public abstract class BaseAlgorithm implements IClassifier {
-    
-    protected long executionTimeMs = 0; 
 
-    /**
-     * Ortak Metot: Çalışma süresini döndürür.
-     * Bu metodu bir kez burada yazıyoruz, KNN ve DecisionTree tekrar yazmadan
-     * bu metodu miras (inherit) yoluyla kullanacak.
-     */
-    public long getExecutionTimeMs() {
-        return executionTimeMs;
+    protected long calismaSuresi = 0;
+
+    public long getCalismaSuresi() {
+        return calismaSuresi;
     }
 
-    public void trainWithTiming(List<UserRecord> data) {
-        long startTime = System.currentTimeMillis();
-        
-        this.train(data); 
-        
-        long endTime = System.currentTimeMillis();
-        this.executionTimeMs = endTime - startTime;
+    public void calismaSuresiniHesapla(List<UserRecord> veri) {
+        long baslangicZamani = System.currentTimeMillis();
+
+        this.egit(veri);
+
+        long bitisZamani = System.currentTimeMillis();
+        this.calismaSuresi = bitisZamani - baslangicZamani;
     }
 }

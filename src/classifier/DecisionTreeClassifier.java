@@ -7,206 +7,202 @@ import java.util.*;
 
 public class DecisionTreeClassifier extends BaseAlgorithm {
 
-    private Node root;
-    private PreProcessor preProcessor;
-    private int maxDepth;
+    private Dugum kokDugum;
+    private PreProcessor onIsleyici;
+    private int maksDerinlik;
 
-    public DecisionTreeClassifier(PreProcessor preProcessor, int maxDepth) {
-        if (preProcessor == null) {
+    public DecisionTreeClassifier(PreProcessor onIsleyici, int maksDerinlik) {
+        if (onIsleyici == null) {
             throw new IllegalArgumentException("PreProcessor cannot be null");
         }
-        if (maxDepth <= 0) {
-            throw new IllegalArgumentException("maxDepth must be positive");
+        if (maksDerinlik <= 0) {
+            throw new IllegalArgumentException("maksDerinlik must be positive");
         }
-        this.preProcessor = preProcessor;
-        this.maxDepth = maxDepth;
+        this.onIsleyici = onIsleyici;
+        this.maksDerinlik = maksDerinlik;
     }
 
     @Override
-    public void train(List<UserRecord> rawTrainingData) {
-        if (rawTrainingData == null || rawTrainingData.isEmpty()) {
+    public void egit(List<UserRecord> hamEgitimVerisi) {
+        if (hamEgitimVerisi == null || hamEgitimVerisi.isEmpty()) {
             throw new IllegalArgumentException("Training data cannot be null or empty");
         }
 
-        // 1. DATA LEAKAGE FIX: Sadece train verisiyle FIT et
-        this.preProcessor.fit(rawTrainingData);
-        
-        // 2. Train verisini TRANSFORM et ve model ağacını kur
-        List<ProcessedRecord> processedData = new ArrayList<>();
-        for (UserRecord user : rawTrainingData) {
-            double[] features = this.preProcessor.transform(user);
-            processedData.add(new ProcessedRecord(features, user.getCategory()));
+        this.onIsleyici.fit(hamEgitimVerisi);
+
+        List<ProcessedRecord> islenmisVeri = new ArrayList<>();
+        for (UserRecord user : hamEgitimVerisi) {
+            double[] ozellikler = this.onIsleyici.transform(user);
+            islenmisVeri.add(new ProcessedRecord(ozellikler, user.getCategory()));
         }
-        
-        root = buildTree(processedData, 0);
+
+        kokDugum = agacOlusturma(islenmisVeri, 0);
     }
 
     @Override
     public String predict(UserRecord user) {
-        if (root == null || preProcessor == null) {
+        if (kokDugum == null || onIsleyici == null) {
             throw new IllegalStateException("Classifier must be trained before prediction");
         }
-        
+
         // Yeni gelen kullanıcıyı (test) transform et.
-        double[] features = preProcessor.transform(user);
-        return predictRecursive(root, features);
+        double[] ozellikler = onIsleyici.transform(user);
+        return tahminDongusu(kokDugum, ozellikler);
     }
 
     @Override
     public List<String> predict(List<UserRecord> users) {
-        List<String> results = new ArrayList<>();
+        List<String> sonuclar = new ArrayList<>();
         for (UserRecord user : users) {
-            results.add(predict(user));
+            sonuclar.add(predict(user));
         }
-        return results;
+        return sonuclar;
     }
 
     @Override
-    public String getName() {
+    public String isimGetir() {
         return "Decision Tree (Gini)";
     }
 
-    private String predictRecursive(Node node, double[] features) {
-        if (node.label != null)
-            return node.label;
+    private String tahminDongusu(Dugum dugum, double[] ozellikler) {
+        if (dugum.etiket != null)
+            return dugum.etiket;
 
-        if (features[node.featureIndex] < node.threshold)
-            return predictRecursive(node.left, features);
+        if (ozellikler[dugum.ozellikIndeksi] < dugum.esikDegeri)
+            return tahminDongusu(dugum.solDugum, ozellikler);
         else
-            return predictRecursive(node.right, features);
+            return tahminDongusu(dugum.sagDugum, ozellikler);
     }
 
-    // ================= TREE =================
-
-    private Node buildTree(List<ProcessedRecord> data, int depth) {
-        if (data.isEmpty())
+    private Dugum agacOlusturma(List<ProcessedRecord> veri, int derinlik) {
+        if (veri.isEmpty())
             return null;
 
-        if (depth >= maxDepth || isPure(data)) {
-            return new Node(getMajority(data));
+        if (derinlik >= maksDerinlik || safMi(veri)) {
+            return new Dugum(cogunluguAl(veri));
         }
 
-        int featureCount = data.get(0).getFeatures().length;
-        double bestGini = Double.MAX_VALUE;
-        int bestFeature = -1;
-        double bestThreshold = 0;
+        int ozellikSayisi = veri.get(0).getFeatures().length;
+        double enIyiGini = Double.MAX_VALUE;
+        int enIyiOzellik = -1;
+        double enIyiEsikDegeri = 0;
 
-        for (int i = 0; i < featureCount; i++) {
-            List<Double> values = new ArrayList<>();
-            for (ProcessedRecord r : data) {
-                values.add(r.getFeatures()[i]);
+        for (int i = 0; i < ozellikSayisi; i++) {
+            List<Double> degerler = new ArrayList<>();
+            for (ProcessedRecord r : veri) {
+                degerler.add(r.getFeatures()[i]);
             }
-            Collections.sort(values);
+            Collections.sort(degerler);
 
-            for (int j = 1; j < values.size(); j++) {
-                if (values.get(j).equals(values.get(j - 1))) continue;
+            for (int j = 1; j < degerler.size(); j++) {
+                if (degerler.get(j).equals(degerler.get(j - 1)))
+                    continue;
 
-                double threshold = (values.get(j - 1) + values.get(j)) / 2;
-                double giniScore = calculateSplitScore(data, i, threshold);
+                double esikDegeri = (degerler.get(j - 1) + degerler.get(j)) / 2;
+                double giniSkoru = bolunmeGiniHesapla(veri, i, esikDegeri);
 
-                if (giniScore < bestGini) {
-                    bestGini = giniScore;
-                    bestFeature = i;
-                    bestThreshold = threshold;
+                if (giniSkoru < enIyiGini) {
+                    enIyiGini = giniSkoru;
+                    enIyiOzellik = i;
+                    enIyiEsikDegeri = esikDegeri;
                 }
             }
         }
 
-        if (bestFeature == -1) {
-            return new Node(getMajority(data));
+        if (enIyiOzellik == -1) {
+            return new Dugum(cogunluguAl(veri));
         }
 
-        List<ProcessedRecord> left = new ArrayList<>();
-        List<ProcessedRecord> right = new ArrayList<>();
+        List<ProcessedRecord> solVeri = new ArrayList<>();
+        List<ProcessedRecord> sagVeri = new ArrayList<>();
 
-        for (ProcessedRecord r : data) {
-            if (r.getFeatures()[bestFeature] < bestThreshold)
-                left.add(r);
+        for (ProcessedRecord r : veri) {
+            if (r.getFeatures()[enIyiOzellik] < enIyiEsikDegeri)
+                solVeri.add(r);
             else
-                right.add(r);
+                sagVeri.add(r);
         }
 
-        if (left.isEmpty() || right.isEmpty()) {
-            return new Node(getMajority(data));
+        if (solVeri.isEmpty() || sagVeri.isEmpty()) {
+            return new Dugum(cogunluguAl(veri));
         }
 
-        Node node = new Node(bestFeature, bestThreshold);
-        node.left = buildTree(left, depth + 1);
-        node.right = buildTree(right, depth + 1);
+        Dugum dugum = new Dugum(enIyiOzellik, enIyiEsikDegeri);
+        dugum.solDugum = agacOlusturma(solVeri, derinlik + 1);
+        dugum.sagDugum = agacOlusturma(sagVeri, derinlik + 1);
 
-        return node;
+        return dugum;
     }
 
-    // ================= GINI HESAPLAMASI =================
+    private double bolunmeGiniHesapla(List<ProcessedRecord> veri, int ozellik, double esikDegeri) {
+        Map<String, Integer> solGrup = new HashMap<>();
+        Map<String, Integer> sagGrup = new HashMap<>();
+        int solSayi = 0;
+        int sagSayi = 0;
 
-    private double calculateSplitScore(List<ProcessedRecord> data, int feature, double threshold) {
-        Map<String, Integer> left = new HashMap<>();
-        Map<String, Integer> right = new HashMap<>();
-        int leftCount = 0;
-        int rightCount = 0;
-
-        for (ProcessedRecord r : data) {
-            if (r.getFeatures()[feature] < threshold) {
-                left.put(r.getLabel(), left.getOrDefault(r.getLabel(), 0) + 1);
-                leftCount++;
+        for (ProcessedRecord r : veri) {
+            if (r.getFeatures()[ozellik] < esikDegeri) {
+                solGrup.put(r.getLabel(), solGrup.getOrDefault(r.getLabel(), 0) + 1);
+                solSayi++;
             } else {
-                right.put(r.getLabel(), right.getOrDefault(r.getLabel(), 0) + 1);
-                rightCount++;
+                sagGrup.put(r.getLabel(), sagGrup.getOrDefault(r.getLabel(), 0) + 1);
+                sagSayi++;
             }
         }
 
-        int total = data.size();
-        double leftWeight = (double) leftCount / total;
-        double rightWeight = (double) rightCount / total;
+        int toplam = veri.size();
+        double solAgirlik = (double) solSayi / toplam;
+        double sagAgirlik = (double) sagSayi / toplam;
 
-        return (leftWeight * gini(left)) + (rightWeight * gini(right));
+        return (solAgirlik * giniHesapla(solGrup)) + (sagAgirlik * giniHesapla(sagGrup));
     }
 
-    private double gini(Map<String, Integer> map) {
-        int total = map.values().stream().mapToInt(i -> i).sum();
-        if (total == 0) return 0;
+    private double giniHesapla(Map<String, Integer> harita) {
+        int toplam = harita.values().stream().mapToInt(i -> i).sum();
+        if (toplam == 0)
+            return 0;
 
-        double sum = 0;
-        for (int count : map.values()) {
-            double p = (double) count / total;
-            sum += p * p;
+        double toplamGini = 0;
+        for (int sayi : harita.values()) {
+            double olasilik = (double) sayi / toplam;
+            toplamGini += olasilik * olasilik;
         }
 
-        return 1 - sum; 
+        return 1 - toplamGini;
     }
 
-    private boolean isPure(List<ProcessedRecord> data) {
-        String first = data.get(0).getLabel();
-        for (ProcessedRecord r : data) {
-            if (!r.getLabel().equals(first))
+    private boolean safMi(List<ProcessedRecord> veri) {
+        String ilkEtiket = veri.get(0).getLabel();
+        for (ProcessedRecord r : veri) {
+            if (!r.getLabel().equals(ilkEtiket))
                 return false;
         }
         return true;
     }
 
-    private String getMajority(List<ProcessedRecord> data) {
-        Map<String, Integer> map = new HashMap<>();
-        for (ProcessedRecord r : data) {
-            map.put(r.getLabel(), map.getOrDefault(r.getLabel(), 0) + 1);
+    private String cogunluguAl(List<ProcessedRecord> veri) {
+        Map<String, Integer> harita = new HashMap<>();
+        for (ProcessedRecord r : veri) {
+            harita.put(r.getLabel(), harita.getOrDefault(r.getLabel(), 0) + 1);
         }
-        return map.entrySet().stream()
+        return harita.entrySet().stream()
                 .max(Map.Entry.comparingByValue())
                 .get().getKey();
     }
 
-    static class Node {
-        int featureIndex;
-        double threshold;
-        Node left, right;
-        String label;
+    static class Dugum {
+        int ozellikIndeksi;
+        double esikDegeri;
+        Dugum solDugum, sagDugum;
+        String etiket;
 
-        Node(String label) {
-            this.label = label;
+        Dugum(String etiket) {
+            this.etiket = etiket;
         }
 
-        Node(int featureIndex, double threshold) {
-            this.featureIndex = featureIndex;
-            this.threshold = threshold;
+        Dugum(int ozellikIndeksi, double esikDegeri) {
+            this.ozellikIndeksi = ozellikIndeksi;
+            this.esikDegeri = esikDegeri;
         }
     }
 }

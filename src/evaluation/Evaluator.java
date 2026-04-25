@@ -62,7 +62,7 @@ public class Evaluator {
             // FIX 9: Her fold'da YENİ bir classifier ve YENİ bir PreProcessor nesnesi yaratılır.
             IClassifier classifier = classifierSupplier.get(); 
             
-            classifier.train(trainFold);
+            classifier.egit(trainFold);
             EvaluationResult result = evaluate(classifier, testFold);
             foldResults.add(result);
         }
