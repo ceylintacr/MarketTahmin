@@ -30,6 +30,7 @@ public class MainFrame extends JFrame {
     private JButton btnLoadTrain;
     private JButton btnLoadTest;
     private JButton btnLoadAll;
+    private JButton btnSplitData;
     private JLabel lblDataPath;
     private JLabel lblSplitStatus;
     private JTextField trainRatioField;
@@ -162,11 +163,16 @@ public class MainFrame extends JFrame {
         testRatioField.setFont(new Font("Segoe UI", Font.BOLD, 13));
         ratioPanel.add(testRatioField, gbc);
 
+        btnSplitData = createStyledButton("Verileri Böl", new Color(52, 152, 219));
+        btnSplitData.setEnabled(false);
+
         splitGroup.add(ratioPanel);
+        splitGroup.add(Box.createRigidArea(new Dimension(0, 10)));
+        splitGroup.add(btnSplitData);
         splitGroup.add(Box.createRigidArea(new Dimension(0, 10)));
         splitGroup.add(lblSplitStatus);
 
-        splitGroup.setMaximumSize(new Dimension(320, 150));
+        splitGroup.setMaximumSize(new Dimension(320, 200));
 
         // 2. Algorithm & Parameters Combined
         JPanel modelGroup = createGroupPanel("Algoritma Seçimi");
@@ -308,6 +314,10 @@ public class MainFrame extends JFrame {
         btnLoadAll.addActionListener(e -> selectAndLoadFile("all"));
         btnLoadTrain.addActionListener(e -> selectAndLoadFile("train"));
         btnLoadTest.addActionListener(e -> selectAndLoadFile("test"));
+        btnSplitData.addActionListener(e -> {
+            splitDataAuto();
+            updateLoadStatus();
+        });
         btnRunModel.addActionListener(e -> executeModels());
 
         rbKnn.addActionListener(e -> updateParamVisibility());
@@ -441,13 +451,16 @@ public class MainFrame extends JFrame {
                     SwingUtilities.invokeLater(() -> {
                         if (mode.equals("all")) {
                             allData = loadedData;
-                            splitDataAuto(); // Otomatik böl
+                            btnSplitData.setEnabled(true);
+                            // splitDataAuto(); // Otomatik bölme kaldırıldı
                         } else if (mode.equals("train")) {
                             trainData = loadedData;
                             allData = null; // Ayrı yüklemede allData geçersiz
+                            btnSplitData.setEnabled(false);
                         } else if (mode.equals("test")) {
                             testData = loadedData;
                             allData = null; // Ayrı yüklemede allData geçersiz
+                            btnSplitData.setEnabled(false);
                         }
                         
                         updateLoadStatus();
@@ -473,6 +486,8 @@ public class MainFrame extends JFrame {
     }
 
     private void splitDataAuto() {
+        trainData = null;
+        testData = null;
         if (allData == null || allData.isEmpty()) return;
         
         try {
@@ -542,13 +557,8 @@ public class MainFrame extends JFrame {
                 long startMem = getUsedMemoryMB();
 
                 if (trainData == null || trainData.isEmpty() || testData == null || testData.isEmpty()) {
-                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this, "Lütfen önce veri setini yükleyin!", "Veri Eksik", JOptionPane.WARNING_MESSAGE));
+                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this, "Lütfen önce verileri bölün veya yükleyin!", "Veri Eksik", JOptionPane.WARNING_MESSAGE));
                     return;
-                }
-
-                // Eğer tek parça veri yüklendiyse, her çalıştırmada YENİDEN KARIŞTIR ve BÖL
-                if (allData != null && !allData.isEmpty()) {
-                    splitDataAuto();
                 }
 
                 Evaluator.EvaluationResult resKNN = null;

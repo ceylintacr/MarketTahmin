@@ -58,16 +58,17 @@ public class DataLoader {
                     }
 
                     String clientCode = getCellStringValue(clientCodeCell);
-                    int age = Math.abs(clientCode.hashCode() % 50) + 18; // Mantıksal eşleştirme
-                    
+                    int age = Math.abs(clientCode.hashCode() % 50) + 18;
+
                     String gender = getCellStringValue(genderCell);
-                    String city = getCellStringValue(brandCell); // brand -> city
-                    double spendingScore = priceCell.getNumericCellValue(); // lineNetTotal -> spendingScore
+                    String city = getCellStringValue(brandCell);
+                    double spendingScore = priceCell.getNumericCellValue();
                     String category = getCellStringValue(categoryCell);
 
                     records.add(new UserRecord(age, city, gender, spendingScore, category));
                 } catch (Exception ex) {
-                    System.err.println("Uyari: " + (row.getRowNum() + 1) + ". satirdaki veriler hatali, bu satir atlandi. (" + ex.getMessage() + ")");
+                    System.err.println("Uyari: " + (row.getRowNum() + 1)
+                            + ". satirdaki veriler hatali, bu satir atlandi. (" + ex.getMessage() + ")");
                 }
             }
         } catch (FileNotFoundException e) {
@@ -77,8 +78,10 @@ public class DataLoader {
                     "Excel dosyasi okunurken beklenmeyen bir hata olustu: " + dataFile.getAbsolutePath(), e);
         } finally {
             try {
-                if (workbook != null) workbook.close();
-                if (fis != null) fis.close();
+                if (workbook != null)
+                    workbook.close();
+                if (fis != null)
+                    fis.close();
             } catch (Exception ex) {
                 System.err.println("Kaynaklar kapatilirken hata olustu: " + ex.getMessage());
             }

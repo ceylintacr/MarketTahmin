@@ -4,66 +4,58 @@ import java.util.*;
 import model.UserRecord;
 
 public class PreProcessor {
-    private Map<String, Integer> cityIndex = new HashMap<>();
+    private Map<String, Integer> sehirIndeksi = new HashMap<>();
     
-    // Fiyat için Min-Max Değişkenleri
-    private double minScore = Double.MAX_VALUE, maxScore = -Double.MAX_VALUE, scoreRange = 1.0;
+    private double enDusukSkor = Double.MAX_VALUE, enYuksekSkor = -Double.MAX_VALUE, skorAraligi = 1.0;
     
-    // Yaş için Min-Max Değişkenleri
-    private double minAge = Double.MAX_VALUE, maxAge = -Double.MAX_VALUE, ageRange = 1.0;
+    private double enDusukYas = Double.MAX_VALUE, enYuksekYas = -Double.MAX_VALUE, yasAraligi = 1.0;
     
-    private int cityCount = 0;
-    private boolean isFitted = false;
+    private int sehirSayisi = 0;
+    private boolean hazirMi = false;
 
-    /**
-     * FIT: SADECE TRAIN VERİSİ İLE ÇALIŞIR.
-     */
-    public void fit(List<UserRecord> trainData) {
-        cityIndex.clear();
-        minScore = Double.MAX_VALUE; maxScore = -Double.MAX_VALUE;
-        minAge = Double.MAX_VALUE; maxAge = -Double.MAX_VALUE;
+    public void egit(List<UserRecord> egitimVerisi) {
+        sehirIndeksi.clear();
+        enDusukSkor = Double.MAX_VALUE; enYuksekSkor = -Double.MAX_VALUE;
+        enDusukYas = Double.MAX_VALUE; enYuksekYas = -Double.MAX_VALUE;
 
-        for (UserRecord r : trainData) {
-            cityIndex.putIfAbsent(r.getCity(), cityIndex.size());
+        for (UserRecord r : egitimVerisi) {
+            sehirIndeksi.putIfAbsent(r.getCity(), sehirIndeksi.size());
             
-            double score = r.getSpendingScore();
-            minScore = Math.min(minScore, score);
-            maxScore = Math.max(maxScore, score);
+            double skor = r.getSpendingScore();
+            enDusukSkor = Math.min(enDusukSkor, skor);
+            enYuksekSkor = Math.max(enYuksekSkor, skor);
             
-            double age = r.getAge();
-            minAge = Math.min(minAge, age);
-            maxAge = Math.max(maxAge, age);
+            double yas = r.getAge();
+            enDusukYas = Math.min(enDusukYas, yas);
+            enYuksekYas = Math.max(enYuksekYas, yas);
         }
         
-        scoreRange = (maxScore - minScore == 0) ? 1 : (maxScore - minScore);
-        ageRange = (maxAge - minAge == 0) ? 1 : (maxAge - minAge);
+        skorAraligi = (enYuksekSkor - enDusukSkor == 0) ? 1 : (enYuksekSkor - enDusukSkor);
+        yasAraligi = (enYuksekYas - enDusukYas == 0) ? 1 : (enYuksekYas - enDusukYas);
         
-        cityCount = cityIndex.size();
-        isFitted = true;
+        sehirSayisi = sehirIndeksi.size();
+        hazirMi = true;
     }
 
-    /**
-     * TRANSFORM: TRAIN VE TEST VERİLERİNİ DÖNÜŞTÜRÜR.
-     */
-    public double[] transform(UserRecord user) {
-        if (!isFitted) {
-            throw new IllegalStateException("PreProcessor fit edilmedi! Önce fit() çağrılmalı.");
+    public double[] donustur(UserRecord kullanici) {
+        if (!hazirMi) {
+            throw new IllegalStateException("PreProcessor eğitilmedi! Önce egit() çağrılmalı.");
         }
 
-        double genderVal = (user.getGender().equalsIgnoreCase("E") || user.getGender().equalsIgnoreCase("Male")) ? 1.0 : 0.0;
+        double cinsiyetDegeri = (kullanici.getGender().equalsIgnoreCase("E") || kullanici.getGender().equalsIgnoreCase("Male")) ? 1.0 : 0.0;
         
-        double normScore = (user.getSpendingScore() - minScore) / scoreRange;
-        double normAge = (user.getAge() - minAge) / ageRange;
+        double normSkor = (kullanici.getSpendingScore() - enDusukSkor) / skorAraligi;
+        double normYas = (kullanici.getAge() - enDusukYas) / yasAraligi;
 
-        double[] features = new double[3 + cityCount];
-        features[0] = genderVal;
-        features[1] = normScore;
-        features[2] = normAge;
+        double[] ozellikler = new double[3 + sehirSayisi];
+        ozellikler[0] = cinsiyetDegeri;
+        ozellikler[1] = normSkor;
+        ozellikler[2] = normYas;
 
-        if (cityIndex.containsKey(user.getCity())) {
-            features[3 + cityIndex.get(user.getCity())] = 1.0;
+        if (sehirIndeksi.containsKey(kullanici.getCity())) {
+            ozellikler[3 + sehirIndeksi.get(kullanici.getCity())] = 1.0;
         }
         
-        return features;
+        return ozellikler;
     }
 }

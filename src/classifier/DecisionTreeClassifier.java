@@ -28,33 +28,32 @@ public class DecisionTreeClassifier extends BaseAlgorithm {
             throw new IllegalArgumentException("Training data cannot be null or empty");
         }
 
-        this.onIsleyici.fit(hamEgitimVerisi);
+        this.onIsleyici.egit(hamEgitimVerisi);
 
         List<ProcessedRecord> islenmisVeri = new ArrayList<>();
-        for (UserRecord user : hamEgitimVerisi) {
-            double[] ozellikler = this.onIsleyici.transform(user);
-            islenmisVeri.add(new ProcessedRecord(ozellikler, user.getCategory()));
+        for (UserRecord kullanici : hamEgitimVerisi) {
+            double[] ozellikler = this.onIsleyici.donustur(kullanici);
+            islenmisVeri.add(new ProcessedRecord(ozellikler, kullanici.getCategory()));
         }
 
         kokDugum = agacOlusturma(islenmisVeri, 0);
     }
 
     @Override
-    public String predict(UserRecord user) {
+    public String predict(UserRecord kullanici) {
         if (kokDugum == null || onIsleyici == null) {
             throw new IllegalStateException("Classifier must be trained before prediction");
         }
 
-        // Yeni gelen kullanıcıyı (test) transform et.
-        double[] ozellikler = onIsleyici.transform(user);
+        double[] ozellikler = onIsleyici.donustur(kullanici);
         return tahminDongusu(kokDugum, ozellikler);
     }
 
     @Override
-    public List<String> predict(List<UserRecord> users) {
+    public List<String> predict(List<UserRecord> kullanicilar) {
         List<String> sonuclar = new ArrayList<>();
-        for (UserRecord user : users) {
-            sonuclar.add(predict(user));
+        for (UserRecord kullanici : kullanicilar) {
+            sonuclar.add(predict(kullanici));
         }
         return sonuclar;
     }

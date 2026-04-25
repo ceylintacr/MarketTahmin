@@ -28,31 +28,27 @@ public class KNNClassifier extends BaseAlgorithm {
             throw new IllegalArgumentException("Training data cannot be null or empty");
         }
 
-        // 1. DATA LEAKAGE FIX: Önce sadece eğitim verisiyle modeli (scaling, encoding)
-        // FIT et.
-        this.onIsleyici.fit(hamEgitimVerisi);
+        this.onIsleyici.egit(hamEgitimVerisi);
 
-        // 2. Eğitim verilerini TRANSFORM et ve sınıflandırıcıya kaydet.
         this.islenmisEgitimVerisi = new ArrayList<>();
-        for (UserRecord user : hamEgitimVerisi) {
-            double[] ozellikler = this.onIsleyici.transform(user);
-            this.islenmisEgitimVerisi.add(new ProcessedRecord(ozellikler, user.getCategory()));
+        for (UserRecord kullanici : hamEgitimVerisi) {
+            double[] ozellikler = this.onIsleyici.donustur(kullanici);
+            this.islenmisEgitimVerisi.add(new ProcessedRecord(ozellikler, kullanici.getCategory()));
         }
 
         System.out.println("[KNNClassifier] Trained on " + islenmisEgitimVerisi.size() + " records with k=" + k);
     }
 
     @Override
-    public String predict(UserRecord user) {
+    public String predict(UserRecord kullanici) {
         if (islenmisEgitimVerisi == null || onIsleyici == null) {
             throw new IllegalStateException("Classifier must be trained before prediction");
         }
-        if (user == null) {
+        if (kullanici == null) {
             throw new IllegalArgumentException("User cannot be null");
         }
 
-        // Test verisini veya tekil müşteriyi mevcut eğitim istatistikleriyle TRANSFORM et.
-        double[] ozellikler = onIsleyici.transform(user);
+        double[] ozellikler = onIsleyici.donustur(kullanici);
 
         List<Komsu> komsular = new ArrayList<>();
         for (ProcessedRecord record : islenmisEgitimVerisi) {
@@ -75,10 +71,10 @@ public class KNNClassifier extends BaseAlgorithm {
     }
 
     @Override
-    public List<String> predict(List<UserRecord> users) {
+    public List<String> predict(List<UserRecord> kullanicilar) {
         List<String> tahminler = new ArrayList<>();
-        for (UserRecord user : users) {
-            tahminler.add(predict(user));
+        for (UserRecord kullanici : kullanicilar) {
+            tahminler.add(predict(kullanici));
         }
         return tahminler;
     }
