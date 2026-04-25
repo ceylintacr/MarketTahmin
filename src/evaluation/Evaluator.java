@@ -42,7 +42,7 @@ public class Evaluator {
         }
 
         List<UserRecord> shuffledData = new ArrayList<>(data);
-        Collections.shuffle(shuffledData, new Random(42));
+        Collections.shuffle(shuffledData);
 
         int foldSize = data.size() / k;
         List<EvaluationResult> foldResults = new ArrayList<>();

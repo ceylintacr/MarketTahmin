@@ -27,9 +27,10 @@ import classifier.IClassifier;
 public class MainFrame extends JFrame {
 
     // --- UI Components ---
-    private JButton btnSelectFile;
-    private JButton btnLoadData;
-    private JLabel lblFileStatus;
+    private JButton btnLoadTrain;
+    private JButton btnLoadTest;
+    private JButton btnLoadAll;
+    private JLabel lblDataPath;
     private JLabel lblSplitStatus;
     private JTextField trainRatioField;
     private JTextField testRatioField;
@@ -90,19 +91,38 @@ public class MainFrame extends JFrame {
         // --- WEST PANEL (Controls) ---
         JPanel leftPanel = new JPanel();
         leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
-        leftPanel.setPreferredSize(new Dimension(280, getHeight()));
+        leftPanel.setPreferredSize(new Dimension(300, getHeight()));
         leftPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
         leftPanel.setBackground(Color.WHITE);
 
-        // 1. Data Load Panel
-        JPanel dataGroup = createGroupPanel("Veri Seti Yükleme");
+        // 1. Data Management Panel
+        JPanel dataGroup = createGroupPanel("Veri Yönetimi");
+        
+        btnLoadAll = createStyledButton("Tüm Veriyi Yükle", new Color(52, 152, 219));
+        btnLoadTrain = createStyledButton("Eğitim Seti Yükle", new Color(46, 204, 113));
+        btnLoadTest = createStyledButton("Test Seti Yükle", new Color(155, 89, 182));
+        
+        lblDataPath = new JLabel("Dosya seçilmedi", SwingConstants.CENTER);
+        lblDataPath.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+        lblDataPath.setForeground(Color.GRAY);
+        lblDataPath.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        btnSelectFile = createStyledButton("Excel Dosyası Seç", new Color(52, 152, 219));
+        btnLoadAll.setMaximumSize(new Dimension(280, 35));
+        btnLoadTrain.setMaximumSize(new Dimension(280, 35));
+        btnLoadTest.setMaximumSize(new Dimension(280, 35));
 
-        lblFileStatus = new JLabel("Dosya seçilmedi", SwingConstants.CENTER);
-        lblFileStatus.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        lblFileStatus.setForeground(Color.DARK_GRAY);
-        lblFileStatus.setAlignmentX(Component.CENTER_ALIGNMENT);
+        dataGroup.add(btnLoadAll);
+        dataGroup.add(Box.createRigidArea(new Dimension(0, 5)));
+        dataGroup.add(btnLoadTrain);
+        dataGroup.add(Box.createRigidArea(new Dimension(0, 5)));
+        dataGroup.add(btnLoadTest);
+        dataGroup.add(Box.createRigidArea(new Dimension(0, 10)));
+        dataGroup.add(lblDataPath);
+        
+        dataGroup.setMaximumSize(new Dimension(320, 200));
+
+        // 2. Split Panel
+        JPanel splitGroup = createGroupPanel("Veri Bölme");
 
         lblSplitStatus = new JLabel(" ", SwingConstants.CENTER);
         lblSplitStatus.setFont(new Font("Segoe UI", Font.BOLD, 12));
@@ -142,20 +162,11 @@ public class MainFrame extends JFrame {
         testRatioField.setFont(new Font("Segoe UI", Font.BOLD, 13));
         ratioPanel.add(testRatioField, gbc);
 
-        btnLoadData = createStyledButton("Verileri Böl", new Color(52, 152, 219));
-        btnLoadData.setEnabled(false);
+        splitGroup.add(ratioPanel);
+        splitGroup.add(Box.createRigidArea(new Dimension(0, 10)));
+        splitGroup.add(lblSplitStatus);
 
-        dataGroup.add(btnSelectFile);
-        dataGroup.add(Box.createRigidArea(new Dimension(0, 5)));
-        dataGroup.add(lblFileStatus);
-        dataGroup.add(Box.createRigidArea(new Dimension(0, 10)));
-        dataGroup.add(ratioPanel);
-        dataGroup.add(Box.createRigidArea(new Dimension(0, 10)));
-        dataGroup.add(btnLoadData);
-        dataGroup.add(Box.createRigidArea(new Dimension(0, 5)));
-        dataGroup.add(lblSplitStatus);
-
-        dataGroup.setMaximumSize(new Dimension(320, 270));
+        splitGroup.setMaximumSize(new Dimension(320, 150));
 
         // 2. Algorithm & Parameters Combined
         JPanel modelGroup = createGroupPanel("Algoritma Seçimi");
@@ -251,6 +262,8 @@ public class MainFrame extends JFrame {
 
         leftPanel.add(dataGroup);
         leftPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        leftPanel.add(splitGroup);
+        leftPanel.add(Box.createRigidArea(new Dimension(0, 10)));
         leftPanel.add(modelGroup);
         leftPanel.add(Box.createRigidArea(new Dimension(0, 10)));
         leftPanel.add(resultGroup);
@@ -292,8 +305,9 @@ public class MainFrame extends JFrame {
         add(rightPanel, BorderLayout.CENTER);
 
         // Listeners
-        btnSelectFile.addActionListener(e -> selectFile());
-        btnLoadData.addActionListener(e -> loadAndSplitData());
+        btnLoadAll.addActionListener(e -> selectAndLoadFile("all"));
+        btnLoadTrain.addActionListener(e -> selectAndLoadFile("train"));
+        btnLoadTest.addActionListener(e -> selectAndLoadFile("test"));
         btnRunModel.addActionListener(e -> executeModels());
 
         rbKnn.addActionListener(e -> updateParamVisibility());
@@ -410,75 +424,87 @@ public class MainFrame extends JFrame {
         repaint();
     }
 
-    private void selectFile() {
+    private void selectAndLoadFile(String mode) {
         JFileChooser fileChooser = new JFileChooser(new File(System.getProperty("user.dir")));
         fileChooser.setDialogTitle("Excel Veri Dosyası Seçin");
         fileChooser.setFileFilter(new FileNameExtensionFilter("Excel Dosyaları", "xlsx", "xls"));
+        
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            dataFile = fileChooser.getSelectedFile();
-
-            lblFileStatus.setText("Yüklendi: " + dataFile.getName());
-            lblSplitStatus.setText("Okunuyor...");
-            btnLoadData.setEnabled(false);
-            btnRunModel.setEnabled(false);
-
+            File file = fileChooser.getSelectedFile();
+            lblDataPath.setText("Son Seçilen: " + file.getName());
+            
             new Thread(() -> {
                 try {
                     DataLoader loader = new DataLoader();
-                    allData = loader.load(dataFile.getAbsolutePath());
+                    List<UserRecord> loadedData = loader.load(file.getAbsolutePath());
+                    
                     SwingUtilities.invokeLater(() -> {
-                        lblSplitStatus.setText("<html><div style='text-align:center;'>" + allData.size()
-                                + " satır okundu.<br>Oranları belirleyip bölün.</div></html>");
-                        btnLoadData.setEnabled(true);
-                        btnRunModel.setEnabled(false); // Veriler bölünmeden çalıştırılamaz
-
-                        // Veri dağılımını hesapla ve göster
+                        if (mode.equals("all")) {
+                            allData = loadedData;
+                            splitDataAuto(); // Otomatik böl
+                        } else if (mode.equals("train")) {
+                            trainData = loadedData;
+                            allData = null; // Ayrı yüklemede allData geçersiz
+                        } else if (mode.equals("test")) {
+                            testData = loadedData;
+                            allData = null; // Ayrı yüklemede allData geçersiz
+                        }
+                        
+                        updateLoadStatus();
+                        
+                        // Veri dağılımını göster
                         Map<String, Integer> distribution = new HashMap<>();
-                        for (UserRecord r : allData) {
+                        for (UserRecord r : loadedData) {
                             distribution.put(r.getCategory(), distribution.getOrDefault(r.getCategory(), 0) + 1);
                         }
+                        
+                        // ŞİMDİ KARIŞTIR (Shuffling)
+                        Collections.shuffle(loadedData);
+                        
                         chartPanel.showDistribution(distribution);
                     });
                 } catch (Exception ex) {
                     SwingUtilities.invokeLater(() -> {
-                        lblSplitStatus.setText("Yükleme Hatası!");
-                        JOptionPane.showMessageDialog(this, ex.getMessage(), "Hata", JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.showMessageDialog(this, "Hata: " + ex.getMessage(), "Yükleme Hatası", JOptionPane.ERROR_MESSAGE);
                     });
                 }
             }).start();
         }
     }
 
-    private void loadAndSplitData() {
-        if (allData == null || allData.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Önce veri setini yüklemelisiniz!", "Uyarı",
-                    JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
+    private void splitDataAuto() {
+        if (allData == null || allData.isEmpty()) return;
+        
         try {
             int trainRatio = Integer.parseInt(trainRatioField.getText());
             int testRatio = Integer.parseInt(testRatioField.getText());
 
             if (trainRatio + testRatio != 100) {
-                JOptionPane.showMessageDialog(this, "Eğitim ve Test oranları toplamı 100 olmalıdır!", "Geçersiz Oran",
-                        JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Eğitim ve Test oranları toplamı 100 olmalıdır!", "Geçersiz Oran", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
-            Collections.shuffle(allData, new Random(42));
+            Collections.shuffle(allData);
             int split = (int) (allData.size() * trainRatio / 100.0);
-            trainData = allData.subList(0, split);
-            testData = allData.subList(split, allData.size());
-
-            btnRunModel.setEnabled(true);
-            lblSplitStatus.setText("<html><div style='text-align:center;'>" + allData.size() + " satır<br>Train: "
-                    + trainData.size() + "<br>Test: " + testData.size() + "</div></html>");
-
+            trainData = new ArrayList<>(allData.subList(0, split));
+            testData = new ArrayList<>(allData.subList(split, allData.size()));
+            
         } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this, "Lütfen oranları geçerli sayı olarak giriniz!", "Hata",
-                    JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Lütfen oranları sayısal girin.", "Hata", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private void updateLoadStatus() {
+        StringBuilder status = new StringBuilder("<html><div style='text-align:center;'>");
+        if (allData != null) {
+            status.append("Tüm Veri: ").append(allData.size()).append(" satır<br>");
+        }
+        status.append("Eğitim: ").append(trainData != null ? trainData.size() : 0).append("<br>");
+        status.append("Test: ").append(testData != null ? testData.size() : 0).append("</div></html>");
+        lblSplitStatus.setText(status.toString());
+        
+        // Eğer hem eğitim hem test verisi varsa butonu aktif et
+        btnRunModel.setEnabled(trainData != null && !trainData.isEmpty() && testData != null && !testData.isEmpty());
     }
 
     private long getUsedMemoryMB() {
@@ -487,8 +513,8 @@ public class MainFrame extends JFrame {
     }
 
     private void executeModels() {
-        if (allData == null || allData.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Lütfen önce bir Excel dosyası yükleyin!", "Uyarı",
+        if ((allData == null || allData.isEmpty()) && (trainData == null || testData == null)) {
+            JOptionPane.showMessageDialog(this, "Lütfen önce veri setini (Tümünü veya Eğitim/Test ayrı) yükleyin!", "Uyarı",
                     JOptionPane.WARNING_MESSAGE);
             return;
         }
@@ -515,21 +541,15 @@ public class MainFrame extends JFrame {
                 System.gc(); // Bellek ölçümü öncesi temizlik tavsiyesi
                 long startMem = getUsedMemoryMB();
 
-                // Dinamik bölme
-                int trainRatio = Integer.parseInt(trainRatioField.getText());
-                int testRatio = Integer.parseInt(testRatioField.getText());
-
-                if (trainRatio + testRatio != 100) {
-                    SwingUtilities.invokeLater(
-                            () -> JOptionPane.showMessageDialog(this, "Eğitim ve Test oranları toplamı 100 olmalıdır!",
-                                    "Geçersiz Oran", JOptionPane.WARNING_MESSAGE));
+                if (trainData == null || trainData.isEmpty() || testData == null || testData.isEmpty()) {
+                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this, "Lütfen önce veri setini yükleyin!", "Veri Eksik", JOptionPane.WARNING_MESSAGE));
                     return;
                 }
 
-                Collections.shuffle(allData, new Random(42));
-                int split = (int) (allData.size() * trainRatio / 100.0);
-                trainData = allData.subList(0, split);
-                testData = allData.subList(split, allData.size());
+                // Eğer tek parça veri yüklendiyse, her çalıştırmada YENİDEN KARIŞTIR ve BÖL
+                if (allData != null && !allData.isEmpty()) {
+                    splitDataAuto();
+                }
 
                 Evaluator.EvaluationResult resKNN = null;
                 Evaluator.EvaluationResult resDT = null;
@@ -569,7 +589,9 @@ public class MainFrame extends JFrame {
 
                 SwingUtilities.invokeLater(() -> {
                     btnRunModel.setEnabled(true);
-                    btnSelectFile.setEnabled(true);
+                    btnLoadAll.setEnabled(true);
+                    btnLoadTrain.setEnabled(true);
+                    btnLoadTest.setEnabled(true);
                     
                     if (isCompare) {
                         extractMetricsCompare(finalResKNN, finalResDT);
