@@ -49,7 +49,7 @@ public class MainFrame extends JFrame {
     private JTextField kValueField;
     private JTextField maxDepthField;
 
-    private JLabel lblOverallAccuracy;
+    private JLabel lblGenelDogruluk;
     private JLabel lblExecutionTime;
     private JLabel lblMemoryUsage;
     private JButton btnRunModel;
@@ -67,13 +67,13 @@ public class MainFrame extends JFrame {
     private Evaluator evaluator;
 
     // Performance Variables
-    private double knnAccuracy, dtAccuracy;
+    private double knnDogruluk, dtDogruluk;
     private long knnTime, dtTime;
 
     // For Single Mode Chart
     private Map<String, Integer> singleModeCorrect = new HashMap<>();
     private Map<String, Integer> singleModeWrong = new HashMap<>();
-    private Evaluator.EvaluationResult currentResult;
+    private Evaluator.DegerlendirmeSonucu currentResult;
     private String currentAlgorithmName = "";
 
     public MainFrame() {
@@ -239,10 +239,10 @@ public class MainFrame extends JFrame {
 
         // 3. Results Section
         JPanel resultGroup = createGroupPanel("Sonuçlar");
-        lblOverallAccuracy = new JLabel("Genel Doğruluk: -", SwingConstants.CENTER);
-        lblOverallAccuracy.setFont(new Font("Segoe UI", Font.BOLD, 17)); // Daha büyük font
-        lblOverallAccuracy.setForeground(Color.BLACK);
-        lblOverallAccuracy.setAlignmentX(Component.CENTER_ALIGNMENT);
+        lblGenelDogruluk = new JLabel("Genel Doğruluk: -", SwingConstants.CENTER);
+        lblGenelDogruluk.setFont(new Font("Segoe UI", Font.BOLD, 17)); // Daha büyük font
+        lblGenelDogruluk.setForeground(Color.BLACK);
+        lblGenelDogruluk.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         lblExecutionTime = new JLabel("Tahmin Süresi: -", SwingConstants.CENTER);
         lblExecutionTime.setFont(new Font("Segoe UI", Font.BOLD, 13));
@@ -254,7 +254,7 @@ public class MainFrame extends JFrame {
         lblMemoryUsage.setForeground(Color.DARK_GRAY);
         lblMemoryUsage.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        resultGroup.add(lblOverallAccuracy);
+        resultGroup.add(lblGenelDogruluk);
         resultGroup.add(Box.createRigidArea(new Dimension(0, 8)));
         resultGroup.add(lblExecutionTime);
         resultGroup.add(Box.createRigidArea(new Dimension(0, 5)));
@@ -330,8 +330,8 @@ public class MainFrame extends JFrame {
         resultsTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && resultsTable.getSelectedRow() != -1 && !rbCompare.isSelected()) {
                 String category = (String) tableModel.getValueAt(resultsTable.getSelectedRow(), 0);
-                if (currentResult != null && currentResult.confusionMatrix.containsKey(category)) {
-                    chartPanel.showCategoryErrorPie(category, currentResult.confusionMatrix.get(category));
+                if (currentResult != null && currentResult.hataMatrisi.containsKey(category)) {
+                    chartPanel.showCategoryErrorPie(category, currentResult.hataMatrisi.get(category));
                 }
             }
         });
@@ -544,8 +544,8 @@ public class MainFrame extends JFrame {
         }
 
         tableModel.setRowCount(0);
-        knnAccuracy = 0;
-        dtAccuracy = 0;
+        knnDogruluk = 0;
+        dtDogruluk = 0;
         knnTime = 0;
         dtTime = 0;
         singleModeCorrect.clear();
@@ -561,8 +561,8 @@ public class MainFrame extends JFrame {
                     return;
                 }
 
-                Evaluator.EvaluationResult resKNN = null;
-                Evaluator.EvaluationResult resDT = null;
+                Evaluator.DegerlendirmeSonucu resKNN = null;
+                Evaluator.DegerlendirmeSonucu resDT = null;
 
                 List<IClassifier> models = new ArrayList<>();
                 if (rbKnn.isSelected() || isCompare) {
@@ -577,15 +577,15 @@ public class MainFrame extends JFrame {
 
                 for (IClassifier model : models) {
                     model.calismaSuresiniHesapla(trainData);
-                    Evaluator.EvaluationResult res = evaluator.evaluate(model, testData);
+                    Evaluator.DegerlendirmeSonucu res = evaluator.degerlendir(model, testData);
                     
                     if (model instanceof KNNClassifier) {
                         resKNN = res;
-                        knnAccuracy = res.accuracy;
+                        knnDogruluk = res.dogruluk;
                         knnTime = model.getCalismaSuresi();
                     } else if (model instanceof DecisionTreeClassifier) {
                         resDT = res;
-                        dtAccuracy = res.accuracy;
+                        dtDogruluk = res.dogruluk;
                         dtTime = model.getCalismaSuresi();
                     }
                 }
@@ -594,8 +594,8 @@ public class MainFrame extends JFrame {
                 long memDiff = endMem - startMem;
                 final long finalMemDiff = Math.max(0, memDiff);
 
-                final Evaluator.EvaluationResult finalResKNN = resKNN;
-                final Evaluator.EvaluationResult finalResDT = resDT;
+                final Evaluator.DegerlendirmeSonucu finalResKNN = resKNN;
+                final Evaluator.DegerlendirmeSonucu finalResDT = resDT;
 
                 SwingUtilities.invokeLater(() -> {
                     btnRunModel.setEnabled(true);
@@ -605,22 +605,22 @@ public class MainFrame extends JFrame {
                     
                     if (isCompare) {
                         extractMetricsCompare(finalResKNN, finalResDT);
-                        lblOverallAccuracy.setText(String.format("Doğruluk = KNN: %%%.1f | DT: %%%.1f",
-                                knnAccuracy * 100, dtAccuracy * 100));
+                        lblGenelDogruluk.setText(String.format("Doğruluk = KNN: %%%.1f | DT: %%%.1f",
+                                knnDogruluk * 100, dtDogruluk * 100));
                         lblExecutionTime.setText(String.format("Süre: KNN %d ms | DT %d ms", knnTime, dtTime));
-                        chartPanel.showComparison(knnAccuracy, knnTime, dtAccuracy, dtTime);
+                        chartPanel.showComparison(knnDogruluk, knnTime, dtDogruluk, dtTime);
                     } else if (rbKnn.isSelected()) {
                         currentResult = finalResKNN;
                         currentAlgorithmName = "KNN";
                         extractMetrics(finalResKNN);
-                        lblOverallAccuracy.setText(String.format("Genel Doğruluk: %%%.1f", knnAccuracy * 100));
+                        lblGenelDogruluk.setText(String.format("Genel Doğruluk: %%%.1f", knnDogruluk * 100));
                         lblExecutionTime.setText(String.format("Tahmin Süresi: %d ms", knnTime));
                         chartPanel.showSingleMode(singleModeCorrect, singleModeWrong, "KNN (K=" + kValueField.getText() + ")");
                     } else {
                         currentResult = finalResDT;
                         currentAlgorithmName = "Decision Tree";
                         extractMetrics(finalResDT);
-                        lblOverallAccuracy.setText(String.format("Genel Doğruluk: %%%.1f", dtAccuracy * 100));
+                        lblGenelDogruluk.setText(String.format("Genel Doğruluk: %%%.1f", dtDogruluk * 100));
                         lblExecutionTime.setText(String.format("Tahmin Süresi: %d ms", dtTime));
                         chartPanel.showSingleMode(singleModeCorrect, singleModeWrong, "Karar Ağacı");
                     }
@@ -641,10 +641,10 @@ public class MainFrame extends JFrame {
         }).start();
     }
 
-    private void extractMetrics(Evaluator.EvaluationResult res) {
-        Map<String, Map<String, Integer>> cm = res.confusionMatrix;
+    private void extractMetrics(Evaluator.DegerlendirmeSonucu res) {
+        Map<String, Map<String, Integer>> cm = res.hataMatrisi;
 
-        java.util.List<String> categories = new java.util.ArrayList<>(res.precision.keySet());
+        java.util.List<String> categories = new java.util.ArrayList<>(res.kesinlik.keySet());
         java.util.Collections.sort(categories); 
 
         for (String category : categories) {
@@ -670,13 +670,13 @@ public class MainFrame extends JFrame {
         }
     }
 
-    private void extractMetricsCompare(Evaluator.EvaluationResult resKNN, Evaluator.EvaluationResult resDT) {
-        Map<String, Map<String, Integer>> cmKNN = resKNN.confusionMatrix;
-        Map<String, Map<String, Integer>> cmDT = resDT.confusionMatrix;
+    private void extractMetricsCompare(Evaluator.DegerlendirmeSonucu resKNN, Evaluator.DegerlendirmeSonucu resDT) {
+        Map<String, Map<String, Integer>> cmKNN = resKNN.hataMatrisi;
+        Map<String, Map<String, Integer>> cmDT = resDT.hataMatrisi;
 
         java.util.Set<String> allCategories = new java.util.HashSet<>();
-        allCategories.addAll(resKNN.precision.keySet());
-        allCategories.addAll(resDT.precision.keySet());
+        allCategories.addAll(resKNN.kesinlik.keySet());
+        allCategories.addAll(resDT.kesinlik.keySet());
 
         java.util.List<String> categories = new java.util.ArrayList<>(allCategories);
         java.util.Collections.sort(categories); 
